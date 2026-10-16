@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import agent, cases, health, stats
+from app.api import agent, cases, health, ml, stats
 from app.api import requests as requests_api
 from app.api.errors import register_error_handlers
 from app.app_db.session import init_db
@@ -27,6 +27,7 @@ def create_app() -> FastAPI:
     app.include_router(cases.router)
     app.include_router(agent.router)
     app.include_router(stats.router)
+    app.include_router(ml.router)
     app.include_router(requests_api.router)
     return app
 

@@ -699,3 +699,12 @@ Deviations from this spec:
 - Homolka is a separate simulated provider and endpoint next to NNH (in reality the same hospital), because the challenge asks for three hospital endpoints.
 - IRIS holds no lab Observations (not used by the pipeline, about 90% of resources); `FHIR_BACKEND=local` still reads them from the bundle files.
 - Observation `imaging-reference` uses `focus` for the source report because R4 `derivedFrom` cannot point to a DiagnosticReport.
+
+### Stage D5 (T088, branch `iris-d5`): done
+- IntegratedML predictions for requests, trained on a **synthetic, labeled** history (`Simulated = 1`, no patient ids). `backend/scripts/ml_generate_history.py` creates `PacsML.RequestHistory` (3,000 rows) and the views `PacsML.LateTrain|LateValid|HoursTrain|HoursValid` (80/20 split, only features known at send time). `backend/scripts/ml_train.py` runs `CREATE/TRAIN/VALIDATE MODEL` for `PacsMLLateArrival` (classification) and `PacsMLResponseHours` (regression) and prints the metrics: classifier accuracy 0.88, precision 0.62, recall 0.97, ROC-AUC 0.97; regression R2 0.56, RMSE 25.9 h.
+- `backend/app/ml/predict.py`: `predict_request(...)` returns `{late_probability, expected_hours, simulated: true}` via `PROBABILITY(PacsMLLateArrival FOR 1)` and `PREDICT(PacsMLResponseHours)`; `GET /api/ml/predict?provider=&modality=&region=&channel=&days_to_deadline=` and the field `prediction` in `GET /api/requests/{id}`.
+- Setup: the community image has no AutoML engine. Run once: `docker exec -u root iris-fhir python3 -m pip install --index-url https://registry.intersystems.com/pypi/simple --extra-index-url https://pypi.org/simple --target /durable/mgr/python intersystems-iris-automl` then `chmod -R a+rX /durable/mgr/python` (no IRIS restart needed; the path is the one embedded Python uses, lives in the data volume). Then `ml_generate_history.py`, `ml_train.py`.
+
+Deviations from this spec:
+- IntegratedML model names cannot contain a schema, so the models are `PacsMLLateArrival` and `PacsMLResponseHours` (tables and views stay in schema `PacsML`).
+- `TRAIN MODEL` over the Python SQL driver kills the connection (error 10053), so `ml_train.py` runs training and validation in an `iris session` through `docker exec`; PREDICT works over the driver.

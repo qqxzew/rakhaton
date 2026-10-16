@@ -13,6 +13,7 @@ from app.app_db.models import Case
 from app.app_db.session import get_db as _db_dependency
 from app.exchange.hospitals import HospitalError, make_client, provider, request
 from app.exchange.mhd import DeliveryRequest, provide_document_bundle
+from app.ml.predict import prediction_for_request
 from app.pipeline.schemas import CaseCheckResult, RequiredItem
 from app.requests.production_client import ProductionClient, ProductionError, get_client, sync_files, visual_trace_url
 
@@ -104,6 +105,7 @@ def get_request(request_id: str, client: ProductionClient = Depends(production))
     sessions = [s for s in data.get("sessionIds", "").split(",") if s]
     data["visualTrace"] = [visual_trace_url(s) for s in sessions]
     _guard(lambda: sync_files(data, client))
+    data["prediction"] = prediction_for_request(data)  # D5 hook (T088)
     return data
 
 
