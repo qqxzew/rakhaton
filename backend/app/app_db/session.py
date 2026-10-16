@@ -1,4 +1,4 @@
-"""SQLite engine and session lifecycle."""
+"""Engine and session lifecycle: IRIS SQL (sqlalchemy-iris) by default, SQLite for tests and offline work."""
 
 from __future__ import annotations
 
@@ -19,7 +19,11 @@ _factory: sessionmaker[Session] | None = None
 def make_engine(url: str) -> Engine:
     if url.startswith("sqlite:///") and ":memory:" not in url:
         Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(url, connect_args={"check_same_thread": False} if "sqlite" in url else {})
+    engine = create_engine(
+        url,
+        connect_args={"check_same_thread": False} if url.startswith("sqlite") else {},
+        pool_pre_ping=not url.startswith("sqlite"),
+    )
     if url.startswith("sqlite"):
         @event.listens_for(engine, "connect")
         def _pragmas(dbapi_conn, _):  # noqa: ANN001

@@ -59,6 +59,9 @@ def _no_real_dataset(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     for name in ("APP_DB_URL", "DEMO_TODAY", "FHIR_BACKEND", "IRIS_FHIR_BASE", "IRIS_USER", "IRIS_PASSWORD",
                  "LLM_BASE_URL", "LLM_MODEL_EXTRACT", "LLM_MODEL_FAST"):
         monkeypatch.delenv(name, raising=False)
+    # Production defaults are IRIS; unit tests run on local files and SQLite so they need no containers.
+    monkeypatch.setenv("FHIR_BACKEND", "local")
+    monkeypatch.setenv("APP_DB_URL", f"sqlite:///{(tmp_path / 'data' / 'app.db').as_posix()}")
     monkeypatch.setenv("API_KEY", "test-key-not-real")
     app_config.get_settings.cache_clear()
     yield

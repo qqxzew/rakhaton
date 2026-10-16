@@ -23,6 +23,13 @@ def _check_db() -> dict:
 
 def _check_fhir() -> dict:
     settings = get_settings()
+    if settings.fhir_backend == "iris":
+        try:
+            from app.fhir_store.iris import IrisFhirStore
+
+            return {"status": "ok", "backend": "iris", "patients": IrisFhirStore().count("Patient")}
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "error", "backend": "iris", "detail": type(exc).__name__}
     if settings.fhir_backend != "local":
         return {"status": "error", "backend": settings.fhir_backend, "detail": "backend not available"}
     fhir_dir = settings.raw_dir / "fhir"

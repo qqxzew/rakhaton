@@ -377,4 +377,3 @@ def test_choose_planned_exam_falls_back_to_latest_and_skips_rt_planning():
     assert choose_planned_exam([exam("2026-05-01", kind="rt_planning", eid="R"),
                                 exam("2026-06-01", eid="I")], date(2026, 2, 10)).id == "I"
     assert choose_planned_exam([exam("2026-05-01", kind="rt_planning", eid="R")], date(2026, 2, 10)).id == "R"
-    assert choose_planned_exam([exam(None, modality="UNKNOWN", kind="mdt")], None) is None

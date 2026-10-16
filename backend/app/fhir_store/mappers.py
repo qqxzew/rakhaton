@@ -24,6 +24,16 @@ def _source_ref(doc_id: str) -> str:
     return f"DiagnosticReport/{doc_id}" if doc_id.startswith("rep-") else f"DocumentReference/{doc_id}"
 
 
+def _derived_from_ref(doc_id: str) -> dict[str, str]:
+    """Observation.derivedFrom only accepts ImagingStudy, DocumentReference, ... (not DiagnosticReport).
+
+    A radiology report `rep-<study id>` derives from its ImagingStudy; the report itself goes in `focus`.
+    """
+    if doc_id.startswith("rep-"):
+        return {"reference": f"ImagingStudy/{doc_id.removeprefix('rep-')}"}
+    return {"reference": _source_ref(doc_id)}
+
+
 def planned_exam_to_service_request(exam: PlannedExam) -> Resource:
     resource: dict[str, Any] = {
         "resourceType": "ServiceRequest",
@@ -47,12 +57,14 @@ def planned_exam_to_service_request(exam: PlannedExam) -> Resource:
 
 
 def reference_to_observation(ref: PriorReference) -> Resource:
-    components = [
-        {"code": {"text": "modality"}, "valueString": ref.modality},
-        {"code": {"text": "body region"}, "valueString": ", ".join(ref.regions)},
-        {"code": {"text": "referenced date"}, "valueString": ref.ref_date.iso if ref.ref_date else ""},
-        {"code": {"text": "holding site"}, "valueString": ref.site_text or ""},
+    values = [
+        ("modality", ref.modality),
+        ("body region", ", ".join(ref.regions)),
+        ("referenced date", ref.ref_date.iso if ref.ref_date else ""),
+        ("holding site", ref.site_text or ""),
     ]
+    # FHIR forbids empty values: leave out components that have nothing to say.
+    components = [{"code": {"text": name}, "valueString": value} for name, value in values if value]
     return {
         "resourceType": "Observation",
         "id": ref.id,
@@ -61,7 +73,8 @@ def reference_to_observation(ref: PriorReference) -> Resource:
                                   "code": "imaging-reference"}]}],
         "code": {"text": "referenced prior study"},
         "subject": _patient_ref(ref.patient_id),
-        "derivedFrom": [{"reference": _source_ref(ref.from_report_id)}],
+        "focus": [{"reference": _source_ref(ref.from_report_id)}],
+        "derivedFrom": [_derived_from_ref(ref.from_report_id)],
         "component": components,
         "extension": [{"url": CONFIDENCE_URL, "valueDecimal": ref.evidence.confidence}],
     }

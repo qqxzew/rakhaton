@@ -656,5 +656,13 @@ Real PACS/ePACS/DICOM connections, real telephony, real email to real hospitals,
 | M8 | not started | |
 | M9 | not started | |
 
+### IRIS Core Track, Stage A (branch `iris-track`): done
+- `docker-compose.yml` runs IRIS for Health (`infra/iris/`, container `iris-fhir`, ports 1972/52773, named volume) and Mailpit (1025/8025). After `docker compose up --build -d` run `uv run python scripts/iris_setup.py` once in `backend/` (creates namespace `FHIRSERVER`, FHIR R4 endpoint `/fhir/r4`, raises the search limit to 100000).
+- `scripts/load_iris.py --all` loads all 1,830 patient bundles without lab Observations (demo patients first, per-resource PUT fallback). IRIS counts equal the file counts for Patient, ImagingStudy, DiagnosticReport, DocumentReference, Condition, Procedure, MedicationAdministration and MedicationRequest.
+- `FHIR_BACKEND=iris` is now the default (`local` stays selectable). `scripts/compare_backends.py --all --pipeline` shows identical resources for all patients and identical pipeline results for the review patients.
+- App state lives in IRIS SQL by default (`APP_DB_URL=iris://SuperUser:SYS@localhost:1972/FHIRSERVER`, sqlalchemy-iris); JSON columns are stored as text (`JsonText`). Tests run on local files and SQLite.
+- Mapper fix: the imaging-reference Observation uses `derivedFrom` ImagingStudy plus `focus` DiagnosticReport (IRIS rejects derivedFrom DiagnosticReport) and omits empty components.
+
 Deviations from this spec:
-- (none yet)
+- IRIS holds no lab Observations (not used by the pipeline, about 90% of resources); `FHIR_BACKEND=local` still reads them from the bundle files.
+- Observation `imaging-reference` uses `focus` for the source report because R4 `derivedFrom` cannot point to a DiagnosticReport.

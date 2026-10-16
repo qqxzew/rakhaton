@@ -11,4 +11,8 @@ def get_store() -> FhirStore:
     backend = get_settings().fhir_backend
     if backend == "local":
         return LocalBundleStore()
+    if backend == "iris":
+        from app.fhir_store.iris import IrisFhirStore
+
+        return IrisFhirStore()
     raise FhirStoreError(f"FHIR_BACKEND={backend!r} is not available yet")
