@@ -74,11 +74,11 @@
 
 ### Stage D: data and AI on IRIS
 
-- [ ] T084 [IRIS-D1] IRIS **Vector Search**: chunks of all radiology reports and clinical notes embedded locally (multilingual sentence-transformers model; the gateway has no embedding model, and text never leaves the machine), vectors in an IRIS SQL table; used in matching to find priors cited without an explicit date
+- [X] T084 [IRIS-D1] IRIS **Vector Search**: chunks of all radiology reports and clinical notes embedded locally (multilingual sentence-transformers model; the gateway has no embedding model, and text never leaves the machine), vectors in an IRIS SQL table; used in matching to find priors cited without an explicit date
 - [X] T085 [IRIS-D2] **FHIR SQL Builder** projection of ImagingStudy, ServiceRequest, Task, Observation (imaging-reference) to SQL; dashboard counts and `/stats` read from it
-- [ ] T086 [IRIS-D3] **HL7 v2**: simulated RIS sends ORM^O01 (planned exam) and ORU^R01 (report) into the production; transformed to FHIR `ServiceRequest`/`DiagnosticReport`; a new ORM triggers the case check
+- [X] T086 [IRIS-D3] **HL7 v2**: simulated RIS sends ORM^O01 (planned exam) and ORU^R01 (report) into the production; transformed to FHIR `ServiceRequest`/`DiagnosticReport`; a new ORM triggers the case check
 - [X] T087 [IRIS-D4] **DICOM**: mock PACS (Orthanc container) with synthetic DICOM study metadata per hospital; IRIS DICOM adapter performs C-FIND as the availability check (`DicomAdapter`), labeled simulated
-- [ ] T088 [IRIS-D5] **IntegratedML**: models predicting late arrival of a requested study and provider response time, trained on a synthetic request history (labeled simulated); prediction shown next to each request
+- [X] T088 [IRIS-D5] **IntegratedML**: models predicting late arrival of a requested study and provider response time, trained on a synthetic request history (labeled simulated); prediction shown next to each request
 - [X] T089 [IRIS-D6] **MCP server / agent** over IRIS tools (`fhir_search`, `sql_query`, `vector_search`, `create_task`, `request_status`), as in the kit's 5.2 tutorial; a chat panel in the patient view
 
 **Checkpoint D**: each feature has a working demo path on the demo patients.
