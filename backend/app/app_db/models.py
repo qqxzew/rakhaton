@@ -1,0 +1,86 @@
+"""Application-only state (meetings, cases, cached check results). Clinical facts live in FHIR."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from datetime import date as Date
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy import Date as SqlDate
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+CHECK_STATUSES = ("pending", "running", "done", "failed")
+READINESS_STATES = ("not_ready", "attention", "ready")
+
+
+def _in_list(column: str, values: tuple[str, ...]) -> str:
+    return f"{column} IN ({', '.join(repr(v) for v in values)})"
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+def utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+class Meeting(Base):
+    __tablename__ = "meeting"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    date: Mapped[Date] = mapped_column(SqlDate, index=True)
+    time: Mapped[str] = mapped_column(String(5))
+    label: Mapped[str] = mapped_column(String(200))
+    eligible_groups: Mapped[list[str]] = mapped_column(JSON, default=list)
+    accepts_registrations: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    cases: Mapped[list[Case]] = relationship(back_populates="meeting")
+
+
+class Case(Base):
+    __tablename__ = "case"
+    __table_args__ = (
+        UniqueConstraint("patient_id", "meeting_id", name="uq_case_patient_meeting"),
+        CheckConstraint(_in_list("check_status", CHECK_STATUSES), name="ck_case_check_status"),
+        CheckConstraint(_in_list("readiness", READINESS_STATES), name="ck_case_readiness"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    patient_id: Mapped[str] = mapped_column(String(64), index=True)
+    meeting_id: Mapped[str] = mapped_column(ForeignKey("meeting.id"))
+    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    group_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    planned_exam_override: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    reference_date: Mapped[Date | None] = mapped_column(SqlDate, nullable=True)
+    date_offset_days: Mapped[int] = mapped_column(Integer, default=0)
+    check_status: Mapped[str] = mapped_column(String(16), default="pending")
+    readiness: Mapped[str] = mapped_column(String(16), default="not_ready")
+    readiness_reason: Mapped[str] = mapped_column(String(400), default="Probíhá úvodní kontrola")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    meeting: Mapped[Meeting] = relationship(back_populates="cases")
+    result: Mapped[CaseResult | None] = relationship(back_populates="case", uselist=False)
+
+
+class CaseResult(Base):
+    """Latest successful pipeline output of a case, kept so it stays visible if a recheck fails."""
+
+    __tablename__ = "case_result"
+
+    case_id: Mapped[str] = mapped_column(ForeignKey("case.id"), primary_key=True)
+    result: Mapped[dict] = mapped_column(JSON)
+    computed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    case: Mapped[Case] = relationship(back_populates="result")
