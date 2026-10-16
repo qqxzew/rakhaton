@@ -663,6 +663,12 @@ Real PACS/ePACS/DICOM connections, real telephony, real email to real hospitals,
 - App state lives in IRIS SQL by default (`APP_DB_URL=iris://SuperUser:SYS@localhost:1972/FHIRSERVER`, sqlalchemy-iris); JSON columns are stored as text (`JsonText`). Tests run on local files and SQLite.
 - Mapper fix: the imaging-reference Observation uses `derivedFrom` ImagingStudy plus `focus` DiagnosticReport (IRIS rejects derivedFrom DiagnosticReport) and omits empty components.
 
+### IRIS Core Track, Stage B (branch `iris-track`): done
+- T078 simulated hospitals as FHIR endpoints: `iris_setup.py` also installs `/nnh/fhir/r4`, `/homolka/fhir/r4`, `/fnm/fhir/r4` (same namespace, own service instance and store, search limit raised); `config/providers.json` has `fhir_base` per provider (Motol `/fhir/r4`, new provider `homolka`). `scripts/seed_hospitals.py` writes synthetic Patient, ImagingStudy and template-text DiagnosticReport for `not_found` items of the demo and review patients, all tagged `urn:pacs-comparator:simulation|simulated` (hash-assigned holders also `simulated-holding-site`); about one in five references stays unseeded on purpose. Nothing is written to `/fhir/r4`.
+- T079 `pipeline/availability_fhir.py` (`FhirHospitalAdapter`, chosen by `AVAILABILITY_ADAPTER=fhir_hospitals|dataset_flag`, default `fhir_hospitals` when `FHIR_BACKEND=iris`): `not_found` items are searched with `ImagingStudy?subject=..&started=ge..&started=le..` first at the resolved site, else at all hospitals. Result: `holding_site` = the hospital that has it, `located_by="fhir-search"`, `provider_study_ref`; nobody has it gives an open issue and an unknown site. Hook: `AvailabilityAdapter.enrich()` called in `run.py`.
+- T080 `exchange/mhd.py`: IHE MHD ITI-65 Provide Document Bundle (SubmissionSet `List` + `DocumentReference` with `context.related` to the provider ImagingStudy and the request id identifier) POSTed to Motol `/fhir/r4`; `find_delivery(request_id)` searches it again. Demo: `scripts/simulate_delivery.py --item <item id>`.
+
 Deviations from this spec:
+- Homolka is a separate simulated provider and endpoint next to NNH (in reality the same hospital), because the challenge asks for three hospital endpoints.
 - IRIS holds no lab Observations (not used by the pipeline, about 90% of resources); `FHIR_BACKEND=local` still reads them from the bundle files.
 - Observation `imaging-reference` uses `focus` for the source report because R4 `derivedFrom` cannot point to a DiagnosticReport.

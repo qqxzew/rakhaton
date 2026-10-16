@@ -39,6 +39,8 @@ class Settings:
     iris_user: str = field(default="", repr=False)
     iris_password: str = field(default="", repr=False)
     demo_today: date | None = None
+    # fhir_hospitals (query the simulated hospital FHIR endpoints) or dataset_flag (Motol PACS flag only)
+    availability_adapter: str = "fhir_hospitals"
 
     @property
     def raw_dir(self) -> Path:
@@ -81,6 +83,7 @@ def get_settings() -> Settings:
         iris_user=os.environ.get("IRIS_USER", ""),
         iris_password=os.environ.get("IRIS_PASSWORD", ""),
         demo_today=date.fromisoformat(demo_today) if demo_today else None,
+        availability_adapter=os.environ.get("AVAILABILITY_ADAPTER", "").strip() or "fhir_hospitals",
     )
 
 

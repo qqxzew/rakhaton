@@ -20,7 +20,7 @@ from app.fhir_store.base import FhirStore
 from app.fhir_store.mappers import write_case_outputs
 from app.llm.client import ExtractionFailed, GatewayBackend, LlmBackend, StructuredLlm
 from app.logging import configure_logging, get_logger
-from app.pipeline.availability import AvailabilityAdapter, DatasetFlagAdapter
+from app.pipeline.availability import AvailabilityAdapter, default_adapter
 from app.pipeline.extract_planned import choose_planned_exam, extract_planned_exams
 from app.pipeline.extract_priors import extract_references
 from app.pipeline.gaps import build_items, open_issues
@@ -79,7 +79,7 @@ def run_patient_check(
     adapter: AvailabilityAdapter | None = None,
 ) -> CaseCheckResult:
     """Pure pipeline run for one patient. Dates stay in the patient's own frame."""
-    adapter = adapter or DatasetFlagAdapter()
+    adapter = adapter or default_adapter()
     timeline = build_timeline(store, patient_id)
     notes: list[str] = []
     extra_issues: list[OpenIssue] = []
@@ -118,6 +118,8 @@ def run_patient_check(
 
     candidates = compute_required(timeline, references, planned, reference_date, load_rules_config(group_id))
     items = build_items(patient_id, candidates, timeline.studies, references, adapter)
+    items, adapter_issues = adapter.enrich(items)  # IRIS Core hook: holding hospital located via FHIR search
+    extra_issues += adapter_issues
     issues = open_issues(timeline, references, items, planned, reference_date) + extra_issues
     readiness, reason = compute_readiness("done", items, issues)
     return CaseCheckResult(

@@ -17,6 +17,9 @@ import iris
 
 NAMESPACE = "FHIRSERVER"
 ENDPOINT = "/fhir/r4"
+# Simulated partner hospitals: each is its own FHIR R4 endpoint in the same namespace (own service
+# instance, own resource store). Filled by scripts/seed_hospitals.py with synthetic data only.
+HOSPITAL_ENDPOINTS = {"nnh": "/nnh/fhir/r4", "homolka": "/homolka/fhir/r4", "fnm": "/fnm/fhir/r4"}
 STRATEGY = "HS.FHIRServer.Storage.JsonAdvSQL.InteractionsStrategy"
 PACKAGE = "hl7.fhir.r4.core@4.0.1"
 
@@ -39,14 +42,14 @@ def wait_for_iris(host: str, port: int, user: str, password: str, timeout: int) 
             time.sleep(3)
 
 
-def raise_search_limit(irispy, limit: int = 100000) -> None:
+def raise_search_limit(irispy, endpoint: str = ENDPOINT, limit: int = 100000) -> None:
     """The server refuses searches that select more than 1000 resources ("SearchTooCostly")."""
-    strategy = irispy.classMethodObject("HS.FHIRServer.API.InteractionsStrategy", "GetStrategyForEndpoint", ENDPOINT)
+    strategy = irispy.classMethodObject("HS.FHIRServer.API.InteractionsStrategy", "GetStrategyForEndpoint", endpoint)
     config = strategy.invokeObject("GetServiceConfigData")
     if int(config.get("MaxSearchResults") or 0) < limit:
         config.set("MaxSearchResults", limit)
         strategy.invokeVoid("SaveServiceConfigData", config)
-        print(f"MaxSearchResults set to {limit}", file=sys.stderr)
+        print(f"MaxSearchResults of {endpoint} set to {limit}", file=sys.stderr)
 
 
 def create_fhir_server(host: str, port: int, user: str, password: str) -> None:
@@ -60,14 +63,18 @@ def create_fhir_server(host: str, port: int, user: str, password: str) -> None:
 
     conn, irispy = connect(host, port, NAMESPACE, user, password)
     try:
-        if irispy.classMethodBoolean("HS.FHIRServer.ServiceInstance", "ExistsByUrl", ENDPOINT):
-            print(f"FHIR endpoint {ENDPOINT} already exists", file=sys.stderr)
-            raise_search_limit(irispy)
-            return
-        print(f"installing FHIR R4 endpoint {ENDPOINT}", file=sys.stderr)
-        irispy.classMethodVoid("HS.FHIRServer.Installer", "InstallNamespace")
-        irispy.classMethodVoid("HS.FHIRServer.Installer", "InstallInstance", ENDPOINT, STRATEGY, PACKAGE)
-        raise_search_limit(irispy)
+        # InstallNamespace is only needed on a fresh namespace, i.e. while the main endpoint is missing.
+        installed_namespace = irispy.classMethodBoolean("HS.FHIRServer.ServiceInstance", "ExistsByUrl", ENDPOINT)
+        for endpoint in (ENDPOINT, *HOSPITAL_ENDPOINTS.values()):
+            if irispy.classMethodBoolean("HS.FHIRServer.ServiceInstance", "ExistsByUrl", endpoint):
+                print(f"FHIR endpoint {endpoint} already exists", file=sys.stderr)
+            else:
+                print(f"installing FHIR R4 endpoint {endpoint}", file=sys.stderr)
+                if not installed_namespace:
+                    irispy.classMethodVoid("HS.FHIRServer.Installer", "InstallNamespace")
+                    installed_namespace = True
+                irispy.classMethodVoid("HS.FHIRServer.Installer", "InstallInstance", endpoint, STRATEGY, PACKAGE)
+            raise_search_limit(irispy, endpoint)
     finally:
         conn.close()
 
@@ -83,6 +90,8 @@ def main() -> None:
     wait_for_iris(args.host, args.port, args.user, args.password, args.timeout)
     create_fhir_server(args.host, args.port, args.user, args.password)
     print(f"FHIR base: http://{args.host}:52773{ENDPOINT}", file=sys.stderr)
+    for name, endpoint in HOSPITAL_ENDPOINTS.items():
+        print(f"hospital {name}: http://{args.host}:52773{endpoint}", file=sys.stderr)
 
 
 if __name__ == "__main__":

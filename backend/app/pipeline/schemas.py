@@ -213,6 +213,9 @@ class RequiredItem(BaseModel):
     date_valid: bool = True
     waived: bool = False
     note: str | None = None
+    # Set by FhirHospitalAdapter: how the holding hospital was found and its ImagingStudy there.
+    located_by: str | None = None
+    provider_study_ref: str | None = None
     simulated: bool = True
 
 
