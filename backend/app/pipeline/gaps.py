@@ -26,6 +26,9 @@ GAP_NOT_FOUND = "Uvedeno v nálezu, ale nenalezeno"
 UNKNOWN_SITE_ID = "unknown"
 UNKNOWN_SITE_NAME = "Neznámé pracoviště"
 FOLLOW_UP_MONTHS = 6
+SITE_WINDOW_CHARS = 150
+# The requesting hospital's own name appears in report headers, so it says nothing about the holder.
+OWN_SITE_IDS = ("motol", UNKNOWN_SITE_ID)
 
 
 @lru_cache
@@ -44,6 +47,44 @@ def resolve_site(site_text: str | None) -> tuple[str, str]:
     return UNKNOWN_SITE_ID, UNKNOWN_SITE_NAME
 
 
+def _anchor_spans(folded_text: str, ref: PriorReference) -> list[tuple[int, int]]:
+    """Where the referenced date is written in the report (falls back to the quoted sentence)."""
+    patterns = []
+    if ref.ref_date_text:
+        compact = [re.escape(ch) for ch in fold(ref.ref_date_text) if not ch.isspace()]
+        if compact:
+            patterns.append(r"\s*".join(compact))
+    quote_tokens = fold(ref.evidence.quote).split()
+    if quote_tokens:
+        patterns.append(r"\s+".join(re.escape(t) for t in quote_tokens))
+    for pattern in patterns:
+        spans = [m.span() for m in re.finditer(pattern, folded_text)]
+        if spans:
+            return spans
+    return []
+
+
+def infer_site_near_date(report_text: str, ref: PriorReference) -> tuple[str, str] | None:
+    """Provider alias written within SITE_WINDOW_CHARS of the referenced date in the citing report."""
+    if not report_text:
+        return None
+    folded = fold(report_text)
+    anchors = _anchor_spans(folded, ref)
+    if not anchors:
+        return None
+    best: tuple[int, int, dict] | None = None
+    for order, provider in enumerate(load_providers()):
+        if provider["id"] in OWN_SITE_IDS:
+            continue
+        for alias in provider.get("aliases", []):
+            pattern = re.compile(rf"(?<!\w){re.escape(fold(alias))}(?!\w)")
+            for hit in pattern.finditer(folded):
+                distance = min(max(0, hit.start() - end, start - hit.end()) for start, end in anchors)
+                if distance <= SITE_WINDOW_CHARS and (best is None or (distance, order) < best[:2]):
+                    best = (distance, order, provider)
+    return (best[2]["id"], best[2]["name"]) if best else None
+
+
 def item_id(patient_id: str, key: str) -> str:
     return "ITEM-" + hashlib.sha1(f"{patient_id}|{key}".encode()).hexdigest()[:12]
 
@@ -54,7 +95,9 @@ def build_items(
     studies: list[Study],
     references: list[PriorReference],
     adapter: AvailabilityAdapter,
+    documents: dict[str, str] | None = None,
 ) -> list[RequiredItem]:
+    """`documents` maps a document id to its full text; it is used to infer a holding site."""
     study_by_id = {s.id: s for s in studies}
     ref_by_id = {r.id: r for r in references}
     items: list[RequiredItem] = []
@@ -72,13 +115,19 @@ def build_items(
         else:
             state = "missing"
 
-        site_id = site_name = None
+        site_id = site_name = site_basis = None
         note = None
         if availability == "not_in_pacs":
             site_id, site_name = "motol", (study.site if study and study.site else "FN Motol")
             note = GAP_NOT_IN_PACS
         elif availability == "not_found":
             site_id, site_name = resolve_site(ref.site_text if ref else None)
+            if site_id != UNKNOWN_SITE_ID:
+                site_basis = "stated"
+            elif ref and not ref.site_text and documents:
+                inferred = infer_site_near_date(documents.get(ref.from_report_id, ""), ref)
+                if inferred:
+                    (site_id, site_name), site_basis = inferred, "text_near_date"
             note = GAP_NOT_FOUND
         elif availability == "unknown":
             note = "Dostupnost snímků v PACS není známa"
@@ -100,6 +149,7 @@ def build_items(
             state=state,
             holding_site_id=site_id,
             holding_site_name=site_name,
+            holding_site_basis=site_basis,
             evidence=ref.evidence if ref else None,
             low_confidence=low_conf,
             date_valid=date_valid,

@@ -117,7 +117,8 @@ def run_patient_check(
             + timedelta(days=1)
 
     candidates = compute_required(timeline, references, planned, reference_date, load_rules_config(group_id))
-    items = build_items(patient_id, candidates, timeline.studies, references, adapter)
+    items = build_items(patient_id, candidates, timeline.studies, references, adapter,
+                        {d.id: d.text for d in timeline.documents})
     issues = open_issues(timeline, references, items, planned, reference_date) + extra_issues
     readiness, reason = compute_readiness("done", items, issues)
     return CaseCheckResult(

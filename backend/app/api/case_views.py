@@ -129,12 +129,13 @@ def build_case_detail(case: Case, result: CaseCheckResult, adapter: Availability
             availability=item.availability, state="ok" if item.waived else item.state,
             holding_site=HoldingSite(id=item.holding_site_id, name=item.holding_site_name or "")
             if item.holding_site_id else None,
+            holding_site_basis=item.holding_site_basis,
             evidence=_evidence(item.evidence), simulated=item.simulated, note=item.note,
         ))
 
     planned = result.planned_exam
     planned_view = PlannedExamView(
-        modality=planned.modality, regions=planned.regions,
+        modality="MDT" if planned.kind == "mdt" else planned.modality, regions=planned.regions,
         date=_shift(planned.date, offset) if planned.date else None, site=planned.site_text,
         quote=planned.evidence.quote, source_doc_id=planned.source_doc_id,
         confidence=planned.evidence.confidence,

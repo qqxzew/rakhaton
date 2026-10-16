@@ -94,6 +94,7 @@ class RequiredItemView(BaseModel):
     availability: Availability
     state: ItemState
     holding_site: HoldingSite | None
+    holding_site_basis: Literal["stated", "text_near_date"] | None = None
     evidence: EvidenceView | None
     request: RequestRef | None = None
     simulated: bool = True
