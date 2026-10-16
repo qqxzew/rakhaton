@@ -1,0 +1,11 @@
+{
+  "local_aet": "WLCMP",
+  "iris_namespace": "PACSDICOM",
+  "iris_port": 1972,
+  "pacs": {
+    "motol": {"ae": "MOTOL", "host": "localhost", "port": 4251, "rest": "http://localhost:8051"},
+    "nnh": {"ae": "NNH", "host": "localhost", "port": 4252, "rest": "http://localhost:8052"},
+    "homolka": {"ae": "HOMOLKA", "host": "localhost", "port": 4253, "rest": "http://localhost:8053"},
+    "fnm": {"ae": "FNM", "host": "localhost", "port": 4254, "rest": "http://localhost:8054"}
+  }
+}

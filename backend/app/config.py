@@ -41,7 +41,8 @@ class Settings:
     demo_today: date | None = None
     # fhir_hospitals (query the simulated hospital FHIR endpoints) or dataset_flag (Motol PACS flag only)
     availability_adapter: str = "fhir_hospitals"
-
+    # iris (C-FIND runs in the IRIS production PACSDICOM) or pynetdicom (fallback), used by AVAILABILITY_ADAPTER=dicom
+    dicom_client: str = "iris"
     @property
     def raw_dir(self) -> Path:
         return self.data_dir / "raw"
@@ -84,6 +85,7 @@ def get_settings() -> Settings:
         iris_password=os.environ.get("IRIS_PASSWORD", ""),
         demo_today=date.fromisoformat(demo_today) if demo_today else None,
         availability_adapter=os.environ.get("AVAILABILITY_ADAPTER", "").strip() or "fhir_hospitals",
+        dicom_client=os.environ.get("DICOM_CLIENT", "").strip() or "iris",
     )
 
 

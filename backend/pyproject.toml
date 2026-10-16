@@ -16,6 +16,8 @@ dependencies = [
     "fastembed>=0.9.0",
     "sqlalchemy-iris>=0.18.1",
     "mcp<2",
+    "pydicom>=3.0.2",
+    "pynetdicom>=3.0.4",
 ]
 
 [dependency-groups]

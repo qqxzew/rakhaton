@@ -688,6 +688,14 @@ Deviations from this spec:
 - Request state lives in IRIS SQL (`PacsComparator_Req.*`), not in `app_db`; the intake is a native-API class method, not REST.
 - Working-hours and T-1 rules are not evaluated; reminders and voice escalation follow the timers only.
 - ElevenLabs returned HTTP 402 for the configured library voice (free plan), so the voice step stores the transcript only until a usable voice id is set.
+### Stage D4 (T087, branch `iris-d4`): done
+- Mock PACS: `docker compose -f docker-compose.yml -f docker-compose.dicom.yml up -d orthanc-motol orthanc-nnh orthanc-homolka orthanc-fnm` starts four Orthanc containers (AE MOTOL/NNH/HOMOLKA/FNM, DICOM ports 4251-4254, REST 8051-8054, no auth, simulation). `config/dicom.json` holds the AE map. `scripts/seed_dicom.py` stores blank synthetic DICOM objects (flag `yes` Motol studies of the demo/review patients at MOTOL, the FHIR-seeded hospital studies at their AE; flag `no`/unknown studies are not stored).
+- IRIS C-FIND: own namespace `PACSDICOM` (`infra/iris/pacsdicom/`, loaded by `scripts/dicom_iris_setup.py`, which also starts `PacsDicom.TestProduction`): `PacsDicom.BO.CFind` (EnsLib.DICOM.Operation.TCP, study-level C-FIND by PatientID, StudyDate range, ModalitiesInStudy), `PacsDicom.BP.CFind` (EnsLib.DICOM.Process), `PacsDicom.BS.Api`, `PacsDicom.Api.CFind` (Native API entry). Nothing was created in FHIRSERVER.
+- `AVAILABILITY_ADAPTER=dicom` selects `pipeline/availability_dicom.py` (`DicomAvailabilityAdapter`): internal studies are looked up at MOTOL, `not_found` references at NNH/HOMOLKA/FNM (holding site, `located_by="dicom-cfind"`). `DICOM_CLIENT=iris` (default) or `pynetdicom` (fallback client in `exchange/dicom.py`). `scripts/check_dicom.py` compares C-FIND with dataset flags and FHIR hospital holders (counts only): 18 of 18 internal required studies agree, 8 of 8 not_found references have the same holder (6 located, 2 held by nobody) with both clients.
+- Setup after the shared stack is up: `uv run python scripts/dicom_iris_setup.py`, then `uv run python scripts/seed_dicom.py`. The Orthanc containers are reached from IRIS through `host.docker.internal`.
+
+Deviations from this spec:
+- The DICOM C-FIND path is an addition (spec 9.7 mentions `DicomQidoAdapter` as a future replacement); the adapter is opt-in and the default stays `fhir_hospitals`.
 - Homolka is a separate simulated provider and endpoint next to NNH (in reality the same hospital), because the challenge asks for three hospital endpoints.
 - IRIS holds no lab Observations (not used by the pipeline, about 90% of resources); `FHIR_BACKEND=local` still reads them from the bundle files.
 - Observation `imaging-reference` uses `focus` for the source report because R4 `derivedFrom` cannot point to a DiagnosticReport.

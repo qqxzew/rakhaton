@@ -33,6 +33,11 @@ def default_adapter() -> AvailabilityAdapter:
     from app.config import get_settings
 
     settings = get_settings()
+    if settings.availability_adapter == "dicom":
+        from app.pipeline.availability_dicom import DicomAvailabilityAdapter
+
+        return DicomAvailabilityAdapter()
+
     if settings.availability_adapter == "fhir_hospitals" and settings.fhir_backend == "iris":
         from app.pipeline.availability_fhir import FhirHospitalAdapter
 
