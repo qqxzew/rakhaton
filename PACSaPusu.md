@@ -8,7 +8,7 @@
 4. Core Pipeline: Gap Detection
 5. HIS Integration
 6. Automated Requests to Imaging Providers
-7. Patient Dashboard
+7. Frontend and MDT Dashboard
 8. MDT Integration
 9. End-to-End Demo Flow
 10. Architecture and Technology Stack
@@ -148,10 +148,52 @@ Real calls and emails are out of scope for a hackathon, so both channels sit beh
 - Data minimization; legal basis and agreements with providers confirmed before go-live (GDPR, local health-data regulation).
 - Voice is used to trigger the secure route, never to transmit sensitive clinical details.
 ---
-## 7. Patient Dashboard
-### 7.1 Trigger
-The dashboard becomes **"Ready for review"** when every required item is `VERIFIED`, or when a coordinator explicitly waives a missing item. Until then it shows a **partial** state with a "waiting for: X" banner, so the MDT can still decide whether to postpone.
-### 7.2 Layout
+## 7. Frontend and MDT Dashboard
+### 7.1 Navigation and scheduled MDT sidebar
+The application opens on a simple dashboard for **today and the following six days**, a rolling seven-day window rather than a calendar week.
+The persistent sidebar contains **only scheduled dates**, ordered chronologically, with one readiness icon per date. It has no Dashboard or Add patient navigation entries and no individual meeting entries.
+There may be MDTs on every day of the week and multiple MDTs on the same day. Each meeting has its own identifier, date, time, diagnosis scope or specialty, and patient list. Selecting a sidebar date opens that day's patient lists in the main area, grouped by MDT with a time and meeting label to distinguish meetings. The sidebar can expose later scheduled dates beyond the dashboard's seven-day window.
+An optional compact monthly calendar sits in the sidebar footer. Color days with scheduled MDTs **green (Ready), yellow (Requires attention), or red (Not ready)** using the day's aggregate status. Days without MDTs remain neutral; this is an absence of scheduled meetings, not a fourth readiness state. Selecting a scheduled day opens the same day view as its sidebar entry. Include month navigation, a distinct selected-day indicator, and accessible date/status labels so color is not the only cue.
+Keep **Add patient** in the main page header. The application title or logo in the top header returns to the initial seven-day dashboard.
+
+### 7.2 Readiness states
+Use exactly three readiness states for patient cases and scheduled MDTs. Pair each icon with a text label; do not rely on color alone.
+| State | Suggested icon | Patient case meaning |
+|---|---|---|
+| **Ready** | Green check circle | All required items are verified, or missing items have been explicitly waived and no unresolved review issue remains |
+| **Requires attention** | Amber warning triangle | Review is needed, such as uncertain extraction, conflicting data, or a pending approval, with no confirmed blocking missing item |
+| **Not ready** | Red cross circle | A required item is missing or unverified, or the initial preparation check has not completed |
+Always show the reason alongside a patient's status, including "Initial check pending" for newly added cases. Request progress such as requested or received is separate from readiness; receipt alone does not mean verification.
+An MDT inherits the most severe patient status: **Not ready** takes precedence over **Requires attention**, which takes precedence over **Ready**. An empty MDT uses **Requires attention** with "No patients scheduled" so it is not presented as a verified meeting. A date inherits the most severe status among its MDTs, using the same precedence. Use this aggregate consistently for its sidebar icon and calendar color. Recalculate meeting and date statuses when a patient is added or their readiness changes.
+
+### 7.3 Initial dashboard: next seven days
+Keep the landing page focused on preparation status:
+- Show the explicit start and end dates of the rolling window.
+- Show total scheduled MDTs and counts in each of the three readiness states.
+- List meetings grouped by day, with time, specialty or diagnosis scope, overall status, patient count, and patient counts by readiness state.
+- Show "No MDT scheduled" for days without meetings, and a clear empty state if the entire window has no scheduled MDTs.
+- Clicking a day or meeting opens the corresponding patient list. Keep **Add patient** accessible from this page.
+
+### 7.4 Selected day and MDT patient lists
+Display the selected date and, for each MDT that day, its time, label, and overall readiness. Each patient row shows:
+- Patient name (a fictional name or pseudonym in the anonymized demo).
+- Diagnosis.
+- Individual readiness icon and text label.
+- A short reason or outstanding item, such as "Waiting for external CT".
+Selecting a patient opens the detailed patient view in section 7.6. An **Add patient** action opens the dedicated registration page; a date or meeting selected from this context is only retained if it supports the entered diagnosis.
+
+### 7.5 Add patient page
+The user can add a patient to the system and schedule their MDT through a dedicated page:
+1. Enter the **patient name**.
+2. Select the **diagnosis** from the supported diagnosis list.
+3. Show **available MDT dates for that diagnosis**, using configured diagnosis-to-MDT eligibility and the actual meeting schedule. Do not infer eligibility from an AI recommendation.
+4. Select a date and, if multiple eligible MDTs occur that day, select the specific meeting by time and label.
+5. Review the name, diagnosis, and chosen meeting, then select **Add patient**.
+The page must require a name, diagnosis, and eligible MDT selection. Changing the diagnosis refreshes the available dates and clears an incompatible selection. If no eligible dates are available, explain this and allow the user to change the diagnosis; do not silently assign an unrelated meeting. Check that the selected meeting is still available on submission and prevent duplicate submissions.
+Successful submission creates the patient record and MDT case, starts the preparation check, and opens the selected MDT's patient list with the new patient visible. The case initially shows **Not ready — Initial check pending**. Name and diagnosis support registration; linking clinical records requires a stable patient identifier or an explicit matching workflow, not a name-only match. If source records cannot be linked, display that reason rather than implying the check passed.
+The scheduling model must include meeting ID, date/time, label, eligible diagnoses, and whether the meeting accepts registrations. The selectable dates are not limited to the dashboard's next seven days.
+
+### 7.6 Patient detail layout
 One screen, designed for projection in an MDT meeting:
 | # | Section | Content |
 |---|---|---|
@@ -164,7 +206,7 @@ One screen, designed for projection in an MDT meeting:
 | 7 | **Open issues panel** | Waived or missing items, data conflicts, low-confidence extractions |
 | 8 | **AI summary** (optional) | Short narrative with each statement linked to its source document; labeled as an aid, not a recommendation |
 | 9 | **Decision capture** | Form for MDT outcome (recommended action, responsible doctor, follow-up date), written back to the HIS |
-### 7.3 Design principles
+### 7.7 Design principles
 - **Traceability:** every number and claim links to its source report.
 - **Presentation mode:** large font, high contrast, single page, plus print/PDF export for MDT minutes.
 - **Multi-patient MDT agenda:** a list of the day's cases with readiness badges.
@@ -172,16 +214,16 @@ One screen, designed for projection in an MDT meeting:
 - **No AI treatment recommendations.** The system structures information; doctors decide.
 ---
 ## 8. MDT Integration
-Add a **gate at MDT registration**: the patient cannot be added until the check passes, or the registration shows a clear status such as "missing: PET 05/2025 from Hospital X, request sent."
+Allow registration before preparation is complete. Adding a patient to an eligible MDT starts the check and immediately shows the case on its agenda with one of the three readiness states and a clear reason, such as "missing: PET 05/2025 from Hospital X, request sent." Readiness must remain visible in the patient list, scheduled MDT sidebar, and seven-day dashboard; it must not prevent the user from adding a patient.
 This directly addresses the core goal of entering a patient into an MDT without calling around.
 ---
 ## 9. End-to-End Demo Flow
-1. A CT is scheduled and an MDT registration is submitted for patient X.
+1. From the seven-day dashboard, the user opens **Add patient**, enters a name and diagnosis, chooses an eligible MDT date and meeting, and submits. The patient appears on the agenda as **Not ready — Initial check pending**.
 2. The HIS integration loads reports, labs, and medications into the canonical model.
 3. The pipeline builds the imaging timeline and finds that a PET from an external hospital is referenced but absent from the mock PACS.
 4. A request is drafted and sent by email. After no reply, the system escalates with a simulated voice call.
 5. The provider "sends" the study, status turns to `RECEIVED`, and a verification step checks modality, date, and series.
-6. All items are verified, so the dashboard flips to **Ready for review** and appears on the MDT agenda.
+6. All items are verified, so the patient changes to **Ready** on the existing MDT agenda. The meeting status and seven-day dashboard counts update accordingly.
 7. In the meeting, doctors review the dashboard, record a decision, and it is written back to the HIS.
 ---
 ## 10. Architecture and Technology Stack
@@ -246,7 +288,7 @@ This directly addresses the core goal of entering a patient into an MDT without 
 | 1 | Canonical data model and dataset-based HIS loader |
 | 2 | Timeline extraction and gap detection with mock PACS |
 | 3 | Request state machine with sandbox email and voice |
-| 4 | Dashboard with timeline, labs, and open issues |
+| 4 | Scheduled MDT sidebar, seven-day dashboard, per-MDT patient lists, diagnosis-filtered patient registration, and patient detail view |
 | 5 | Polish: AI summary with source links, presentation mode, MDT agenda view |
 ### 13.3 Later extensions
 - Diagnosis-specific rule sets
@@ -274,4 +316,3 @@ Depending on priorities, the following could be drafted next:
 - A **wireframe of the dashboard**
 - The **LLM extraction prompt and JSON schema** for reports
 If you share the dataset format (structured or free text, language, size), the extraction schema and rule set can be made much more specific.
-
