@@ -668,7 +668,13 @@ Real PACS/ePACS/DICOM connections, real telephony, real email to real hospitals,
 - T079 `pipeline/availability_fhir.py` (`FhirHospitalAdapter`, chosen by `AVAILABILITY_ADAPTER=fhir_hospitals|dataset_flag`, default `fhir_hospitals` when `FHIR_BACKEND=iris`): `not_found` items are searched with `ImagingStudy?subject=..&started=ge..&started=le..` first at the resolved site, else at all hospitals. Result: `holding_site` = the hospital that has it, `located_by="fhir-search"`, `provider_study_ref`; nobody has it gives an open issue and an unknown site. Hook: `AvailabilityAdapter.enrich()` called in `run.py`.
 - T080 `exchange/mhd.py`: IHE MHD ITI-65 Provide Document Bundle (SubmissionSet `List` + `DocumentReference` with `context.related` to the provider ImagingStudy and the request id identifier) POSTed to Motol `/fhir/r4`; `find_delivery(request_id)` searches it again. Demo: `scripts/simulate_delivery.py --item <item id>`.
 
+### IRIS Core Track, Stage D2 (branch `iris-d2`): done
+- T085 FHIR SQL Builder projection: `backend/scripts/sql_projection_setup.py` (idempotent, prefix `pacs`) drives the FSB REST API (`/csp/fhirsql/api/ui`, the same one as the `/csp/fhirsql/` UI): credentials `pacsCreds`, repository `pacsRepo` (`/fhir/r4`), analysis, spec `pacsSpec`, projection package `PacsProjection` with tables ImagingStudy, DiagnosticReport, ServiceRequest, Task, Observation, Provenance. Run `PYTHONPATH=. uv run python scripts/sql_projection_setup.py` in `backend/`; `--rebuild` refreshes the tables after new FHIR writes (the projection is a snapshot), `--status` lists the objects. No UI step is needed.
+- `app/stats/projection.py` + `GET /api/stats` read only `PacsProjection.*`: studies per modality, studies not in PACS, open tasks per state, cited priors not found (same patient has no projected study of that modality on the cited date), requests per hospital (`Task.restriction.recipient.display`), planned exams per modality.
+- Creating the FSB repository resets `MaxSearchResults` of `/fhir/r4` to 1000; the script restores 100000 at the end.
+
 Deviations from this spec:
+- Task writers must set `restriction.recipient.display` to the hospital; "requests per hospital" groups by it.
 - Homolka is a separate simulated provider and endpoint next to NNH (in reality the same hospital), because the challenge asks for three hospital endpoints.
 - IRIS holds no lab Observations (not used by the pipeline, about 90% of resources); `FHIR_BACKEND=local` still reads them from the bundle files.
 - Observation `imaging-reference` uses `focus` for the source report because R4 `derivedFrom` cannot point to a DiagnosticReport.

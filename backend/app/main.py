@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import cases, health
+from app.api import cases, health, stats
 from app.api.errors import register_error_handlers
 from app.app_db.session import init_db
 from app.logging import configure_logging
@@ -24,6 +24,7 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(cases.router)
+    app.include_router(stats.router)
     return app
 
 
