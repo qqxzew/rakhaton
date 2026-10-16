@@ -678,6 +678,16 @@ Real PACS/ePACS/DICOM connections, real telephony, real email to real hospitals,
 
 Deviations from this spec:
 - Task writers must set `restriction.recipient.display` to the hospital; "requests per hospital" groups by it.
+### IRIS Core Track, Stage C (branch `iris-c`): done
+- T081/T082 the request loop runs as an IRIS Interoperability production `PacsComparator.Production` in `FHIRSERVER` (sources `iris/src/PacsComparator/`, installed idempotently by `uv run python -m scripts.iris_production` in `backend/`, also called by `scripts/iris_setup.py`, skip with `--skip-production`). Items: `BS.RequestIntake` (native-API entry), `BS.Ticker` (5 s timer pass), `BP.RequestLifecycle` (state machine, approval enforced before sending), `BO.Email` (Mailpit), `BO.HospitalFhir` (finds the MHD delivery), `BO.Voice` (Czech script, ElevenLabs mp3 if available, else transcript), `BO.FhirWriter` (Task, AuditEvent, Communication to `/fhir/r4`). Reply parsing uses the `-dz-eu` LLM with a keyword fallback; credentials are Ens credentials `PacsComparator.*` filled from `.env`.
+- Backend only calls it: `app/requests/production_client.py`, `app/api/requests.py` (`POST /api/cases/{id}/requests`, `GET /api/requests/{id}`, `approve`, `approve-all`, `simulate-reply|call|delivery`, `POST /api/demo/advance-time`).
+- Visual Trace: Management Portal (`http://localhost:52773/csp/healthshare/fhirserver/EnsPortal.ProductionConfig.zen`, namespace FHIRSERVER) > Interoperability > Monitor > Message Viewer, open a message and its session; or directly `http://localhost:52773/csp/healthshare/fhirserver/EnsPortal.VisualTrace.zen?SESSIONID=<id>`. Every request event is its own session; `GET /api/requests/{id}` returns `sessionIds` and ready-made `visualTrace` URLs.
+- Timers: normal profile 24 h; `DemoSeconds` setting of `BP.RequestLifecycle` gives a short profile; "advance time" shifts a demo clock (`^PacsComparator.Clock`) and runs the timers once.
+
+Deviations from this spec:
+- Request state lives in IRIS SQL (`PacsComparator_Req.*`), not in `app_db`; the intake is a native-API class method, not REST.
+- Working-hours and T-1 rules are not evaluated; reminders and voice escalation follow the timers only.
+- ElevenLabs returned HTTP 402 for the configured library voice (free plan), so the voice step stores the transcript only until a usable voice id is set.
 - Homolka is a separate simulated provider and endpoint next to NNH (in reality the same hospital), because the challenge asks for three hospital endpoints.
 - IRIS holds no lab Observations (not used by the pipeline, about 90% of resources); `FHIR_BACKEND=local` still reads them from the bundle files.
 - Observation `imaging-reference` uses `focus` for the source report because R4 `derivedFrom` cannot point to a DiagnosticReport.

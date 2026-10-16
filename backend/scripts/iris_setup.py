@@ -86,12 +86,20 @@ def main() -> None:
     parser.add_argument("--user", default="SuperUser")
     parser.add_argument("--password", default="SYS")
     parser.add_argument("--timeout", type=int, default=600)
+    parser.add_argument("--skip-production", action="store_true", help="do not install the request-loop production")
     args = parser.parse_args()
     wait_for_iris(args.host, args.port, args.user, args.password, args.timeout)
     create_fhir_server(args.host, args.port, args.user, args.password)
     print(f"FHIR base: http://{args.host}:52773{ENDPOINT}", file=sys.stderr)
     for name, endpoint in HOSPITAL_ENDPOINTS.items():
         print(f"hospital {name}: http://{args.host}:52773{endpoint}", file=sys.stderr)
+    if not args.skip_production:
+        try:
+            from scripts.iris_production import install_production
+        except ModuleNotFoundError:  # started as a plain script
+            from iris_production import install_production
+
+        install_production(args.host, args.port, args.user, args.password)
 
 
 if __name__ == "__main__":
