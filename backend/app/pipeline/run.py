@@ -37,6 +37,7 @@ from app.pipeline.schemas import (
     Timeline,
 )
 from app.pipeline.timeline import build_timeline
+from app.scheduling.anchoring import compute_offset
 from app.search.undated import default_backend as default_vector_backend
 from app.search.undated import proposal_items, propose_undated_matches
 from app.search.vector_store import VectorBackend
@@ -124,7 +125,8 @@ def run_patient_check(
             + timedelta(days=1)
 
     candidates = compute_required(timeline, references, planned, reference_date, load_rules_config(group_id))
-    items = build_items(patient_id, candidates, timeline.studies, references, adapter)
+    items = build_items(patient_id, candidates, timeline.studies, references, adapter,
+                        {d.id: d.text for d in timeline.documents})
     items, adapter_issues = adapter.enrich(items)  # IRIS Core hook: holding hospital located via FHIR search
     extra_issues += adapter_issues
     # Vector Search hook (D1): items for proposed matches of undated references.
@@ -170,7 +172,7 @@ def run_case_check(case_id: str, store: FhirStore, llm: StructuredLlm) -> CaseCh
         case.readiness, case.readiness_reason = result.readiness, result.readiness_reason
         case.reference_date = result.reference_date
         if result.reference_date is not None:
-            case.date_offset_days = (case.meeting.date - result.reference_date).days
+            case.date_offset_days = compute_offset(case.meeting.date, result.reference_date)
         payload = json.loads(result.model_dump_json())
         if case.result is None:
             db.add(CaseResult(case_id=case_id, result=payload, computed_at=utcnow()))

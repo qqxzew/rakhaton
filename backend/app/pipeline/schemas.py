@@ -212,6 +212,7 @@ class RequiredItem(BaseModel):
     state: ItemState
     holding_site_id: str | None = None
     holding_site_name: str | None = None
+    holding_site_basis: Literal["stated", "text_near_date"] | None = None
     evidence: Evidence | None = None
     low_confidence: bool = False
     date_valid: bool = True

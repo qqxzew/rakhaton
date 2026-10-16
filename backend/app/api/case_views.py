@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import date, timedelta
+from datetime import date
 
 from app.api.schemas import (
     CaseDetail,
@@ -24,6 +24,7 @@ from app.config import today
 from app.pipeline.availability import AvailabilityAdapter, DatasetFlagAdapter
 from app.pipeline.rules import fmt_date
 from app.pipeline.schemas import CaseCheckResult, PartialDate, Study
+from app.scheduling.anchoring import compute_offset, shift_iso
 
 _FIRST_F = ["Jana", "Eva", "Marie", "Hana", "Lenka", "Petra", "Alena", "Věra", "Zuzana", "Ivana"]
 _FIRST_M = ["Jan", "Petr", "Josef", "Pavel", "Martin", "Tomáš", "Jiří", "Karel", "Milan", "Václav"]
@@ -62,7 +63,11 @@ def age_band(birth_year: int | None) -> str:
 
 
 def _shift(day: date, offset: int) -> str:
-    return (day + timedelta(days=offset)).isoformat()
+    return shift_iso(day, offset)
+
+
+def diagnosis_label(code: str) -> str:
+    return f"{code} {_ICD_TEXT.get(code[:3], f'Diagnóza {code}')}"
 
 
 def _partial(pd: PartialDate | None, offset: int) -> tuple[str | None, str | None]:
@@ -117,9 +122,7 @@ def _evidence(item_evidence) -> EvidenceView | None:
 def build_case_detail(case: Case, result: CaseCheckResult, adapter: AvailabilityAdapter | None = None,
                       display_name: str | None = None) -> CaseDetail:
     adapter = adapter or DatasetFlagAdapter()
-    offset = case.date_offset_days
-    if result.reference_date is not None:
-        offset = (case.meeting.date - result.reference_date).days
+    offset = compute_offset(case.meeting.date, result.reference_date, case.date_offset_days)
 
     items: list[RequiredItemView] = []
     for item in result.items:
@@ -130,6 +133,7 @@ def build_case_detail(case: Case, result: CaseCheckResult, adapter: Availability
             availability=item.availability, state="ok" if item.waived else item.state,
             holding_site=HoldingSite(id=item.holding_site_id, name=item.holding_site_name or "")
             if item.holding_site_id else None,
+            holding_site_basis=item.holding_site_basis,
             evidence=_evidence(item.evidence), simulated=item.simulated, note=item.note,
             proposed_match=ProposedMatch(study_id=item.study_id, report_id=item.proposed_report_id,
                                          score=item.similarity_score or 0.0)
@@ -138,7 +142,7 @@ def build_case_detail(case: Case, result: CaseCheckResult, adapter: Availability
 
     planned = result.planned_exam
     planned_view = PlannedExamView(
-        modality=planned.modality, regions=planned.regions,
+        modality="MDT" if planned.kind == "mdt" else planned.modality, regions=planned.regions,
         date=_shift(planned.date, offset) if planned.date else None, site=planned.site_text,
         quote=planned.evidence.quote, source_doc_id=planned.source_doc_id,
         confidence=planned.evidence.confidence,

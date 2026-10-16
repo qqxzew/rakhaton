@@ -30,6 +30,7 @@ EXTERNAL_PLAN = re.compile(
 )
 DATED_COMPARISON = re.compile(r"srovn|porovn|oproti")
 DATE = re.compile(r"\b\d{1,2}\s*\.\s*\d{1,2}\s*\.\s*\d{2,4}\b")
+PREFERRED_MODALITIES = ("CT", "MR", "PET")
 
 
 @dataclass
@@ -115,19 +116,24 @@ def main() -> int:
         return 0
 
     llm = StructuredLlm(GatewayBackend())
-    selected: list[dict] = []
+    preferred: list[dict] = []
+    fallback: list[dict] = []
     tried = 0
     for feat in eligible[: args.max_verify]:
         tried += 1
         verdict = verify(store, llm, feat.patient_id)
         print(f"verified {tried}: {'ok' if verdict else 'rejected'}", file=sys.stderr)
         if verdict:
-            selected.append({**verdict, "stage1_score": feat.score, "uro": feat.uro})
-        if len(selected) >= args.count:
+            entry = {**verdict, "stage1_score": feat.score, "uro": feat.uro}
+            (preferred if verdict["planned_modality"] in PREFERRED_MODALITIES else fallback).append(entry)
+        if len(preferred) >= args.count:
             break
-    payload = {"stage": 2, "patients": selected, "tried": tried}
+    # Patients whose planned exam is CT, MR or PET come first; others only fill the remaining places.
+    selected = (preferred + fallback)[: args.count]
+    payload = {"stage": 2, "patients": selected, "tried": tried, "preferred": len(preferred)}
     out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    print(f"selected {len(selected)} demo patients -> {out_path}", file=sys.stderr)
+    print(f"selected {len(selected)} demo patients ({len(preferred)} with planned CT/MR/PET) -> {out_path}",
+          file=sys.stderr)
     return 0 if selected else 1
 
 

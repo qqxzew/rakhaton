@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  /* presentation mode scales everything through the root font size */
+  font-size: 16px;
+}
+
+html.presentation {
+  font-size: 20px;
+}
+
+body {
+  @apply bg-white text-slate-900 antialiased;
+  font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}

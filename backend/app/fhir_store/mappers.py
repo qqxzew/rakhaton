@@ -41,7 +41,8 @@ def planned_exam_to_service_request(exam: PlannedExam) -> Resource:
         "status": "active",
         "intent": "plan",
         "subject": _patient_ref(exam.patient_id),
-        "code": {"coding": [{"system": DCM, "code": exam.modality}], "text": exam.modality},
+        "code": {"text": "MDT"} if exam.kind == "mdt"
+        else {"coding": [{"system": DCM, "code": exam.modality}], "text": exam.modality},
         "bodySite": [{"text": region} for region in exam.regions],
         "reasonReference": [{"reference": _source_ref(exam.source_doc_id)}],
         "extension": [

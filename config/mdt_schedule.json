@@ -1,0 +1,8 @@
+[
+  {"template": "uro", "label": "Uroonkologický MDT", "weekday": 1, "time": "14:00", "groups": ["uro"]},
+  {"template": "lung", "label": "Pneumoonkologický MDT", "weekday": 2, "time": "13:00", "groups": ["lung"]},
+  {"template": "breast", "label": "Mamologický MDT", "weekday": 3, "time": "12:30", "groups": ["breast"]},
+  {"template": "gi", "label": "GIT MDT", "weekday": 3, "time": "15:00", "groups": ["gi"]},
+  {"template": "hn", "label": "MDT hlavy a krku", "weekday": 4, "time": "13:30", "groups": ["hn"]},
+  {"template": "general", "label": "Obecný onkologický MDT", "weekday": 5, "time": "10:00", "groups": ["cns", "other", "uro", "lung", "breast", "gi", "hn"]}
+]
