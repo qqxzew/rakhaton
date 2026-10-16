@@ -228,7 +228,6 @@ def teardown(fsb: Fsb) -> None:
 def restore_search_limit(host: str, user: str, password: str) -> None:
     """Creating the repository/analysis resets MaxSearchResults of /fhir/r4 to 1000; set it back."""
     import iris
-
     from iris_setup import ENDPOINT, raise_search_limit
 
     conn = iris.createConnection(host, 1972, "FHIRSERVER", user, password)
