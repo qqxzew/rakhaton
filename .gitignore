@@ -1,2 +1,6 @@
 .env 
 .claude/ 
+# challenge data (non-public, never commit)
+*.zip
+data/
+dataset/
