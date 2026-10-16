@@ -23,6 +23,7 @@ Read sections 1 to 4 before writing any code. They contain hard rules.
 - **Submission deadline: Saturday 17 October 2026, 13:00** at submit.rakathon.cz. After 13:00 the form accepts nothing.
 - Judging on Saturday: the challenge customer walks to our table and we show a live demo. Criteria: (1) how well the AI really works, (2) fit for the customer's real workflow incl. safety, data, regulation, integration, (3) innovation. Finals on Sunday add scalability and presentation.
 - Side prize we target: **InterSystems** (best use of InterSystems IRIS for Health + HL7 FHIR). Their criteria: innovation, real-world impact, use of InterSystems technology, technical integrity; reading from and writing to FHIR is a plus.
+- **Team decision: InterSystems IRIS for Health is the core of the product, used to the maximum.** The dataset and all our resources live in the IRIS FHIR server, app state lives in IRIS SQL, the request loop runs as an IRIS Interoperability production, and Vector Search, FHIR SQL Builder, HL7 v2, DICOM, IHE MHD, IntegratedML and an MCP server each have a real role. The full list is the "IRIS Core Track" in `specs/001-pacs-comparator-check/tasks.md` (T067, T074, T066, T076 to T090). Wherever older text in this file calls IRIS optional or late, the IRIS Core Track wins.
 - Team: 3 people, one developer who codes with AI agents, two who do data labeling, QA, design and submission.
 
 ### The customer's problem (in their words, translated)
@@ -131,7 +132,7 @@ backend (Python 3.11+, FastAPI)
   ├─ requests/        state machine, channels (email, voice), reply parsing, verification
   ├─ scheduling/      MDT meetings, eligibility, demo time anchoring
   ├─ fhir_store/      FhirStore interface: IrisFhirStore | LocalBundleStore
-  ├─ app_db/          app state (SQLAlchemy): SQLite for dev, IRIS SQL when available
+  ├─ app_db/          app state (SQLAlchemy): IRIS SQL (default), SQLite only for unit tests
   └─ llm/             gateway client, prompts, JSON validation, cache
         │
         ├─► InterSystems IRIS for Health: FHIR R4 server (read dataset, write our resources)
@@ -140,7 +141,7 @@ backend (Python 3.11+, FastAPI)
 
 Why this shape:
 - The LLM key must stay on the server, and the pipeline is Python.
-- `FhirStore` has two implementations so development never blocks on IRIS: `LocalBundleStore` reads `data/raw/fhir/PAC-*.json` into memory; `IrisFhirStore` talks FHIR REST to IRIS. Same interface, chosen by `FHIR_BACKEND=local|iris`.
+- `FhirStore` has two implementations: `IrisFhirStore` (the **default and primary store**) talks FHIR REST to IRIS; `LocalBundleStore` reads `data/raw/fhir/PAC-*.json` and is kept only for unit tests and as a fallback. Same interface, chosen by `FHIR_BACKEND=iris|local`.
 - **FHIR is the system of record for clinical facts and for our outputs** (ServiceRequest, Task, Communication, Provenance, AuditEvent, extracted Observations). App-only state (meetings, cases, UI flags, request events log) is in `app_db`.
 
 ### 5.1 Repository layout
@@ -178,10 +179,10 @@ data/                     git-ignored: raw/, cache/, outbox/, voice/, labels/, a
 | `LLM_BASE_URL` | default `https://apim-rakathon-q7146n.azure-api.net/openai/v1/` |
 | `LLM_MODEL_EXTRACT` | default `gpt-6-1-sol-dz-eu` |
 | `LLM_MODEL_FAST` | default `gpt-6-luna-dz-eu` (reply parsing, short tasks) |
-| `FHIR_BACKEND` | `local` or `iris` |
+| `FHIR_BACKEND` | `iris` (default) or `local` (tests/fallback) |
 | `IRIS_FHIR_BASE` | FHIR base URL of the IRIS server (take it from the kit's README) |
 | `IRIS_USER`, `IRIS_PASSWORD` | IRIS credentials from the kit |
-| `APP_DB_URL` | default `sqlite:///data/app.db` |
+| `APP_DB_URL` | default `iris://SuperUser:SYS@localhost:1972/FHIRSERVER` (IRIS SQL); `sqlite:///data/app.db` only for tests/fallback |
 | `DEMO_TODAY` | optional ISO date to freeze "today" for the demo |
 | `SMTP_HOST`, `SMTP_PORT` | Mailpit for the email sandbox, default `localhost:1025` |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` | optional, for Czech TTS voice messages |
@@ -225,7 +226,7 @@ clinical_documents(patient_id) -> [DocumentReference with text]
 conditions(patient_id), treatments(patient_id)
 create(resource) / update(resource) / search(type, params)
 ```
-`LocalBundleStore.create/update` writes our resources to `data/fhir_out/` so the app works without IRIS.
+`LocalBundleStore.create/update` writes our resources to `data/fhir_out/` for tests and fallback only; the product writes to IRIS.
 
 ### 6.4 Resources we write
 | Resource | When | Key content |
@@ -356,7 +357,7 @@ Prompt returns:
 ```
 - Resolve relative timing against the document date.
 - Ignore radiotherapy planning CT ("plánovací CT") as a comparator trigger unless nothing else exists; label it `kind=rt_planning`.
-- The chosen planned exam for a case: the earliest one on or after the latest document date; else the latest overall. Write it as `ServiceRequest` + `Provenance`.
+- The chosen planned exam for a case: CT, MR, PET and MDT plans come first; RTG, SONO and other imaging only when nothing in that group exists; `rt_planning` only when nothing else exists. Within the chosen group: the earliest one on or after the latest document date; else the latest overall. An MDT plan has no modality (shown as "MDT"). Write it as `ServiceRequest` + `Provenance`.
 - The coordinator can override the planned exam in the UI (modality, region).
 
 ### 9.4 Normalization
@@ -374,7 +375,7 @@ For each PriorReference of the patient:
 
 ### 9.6 Required priors (rules engine, `config/rules.yaml`)
 For the case's planned exam (modality M, regions R, reference date D):
-- **R1 referenced**: every reference from the latest report of each (modality, region) relevant to R, plus every reference in reports of the last 12 months before D whose regions overlap R.
+- **R1 referenced**: references only from the most recent report of each (modality, region) relevant to R. Of those, keep at most the 2 latest cited priors per (cited modality, region) (`max_per_group` in `config/rules.yaml`). Older reports in a chain are not read for R1; the baseline comes from R3.
 - **R2 latest same**: the latest internal study with modality M and region overlap R before D, and the one before it.
 - **R3 baseline**: the latest study with region overlap R before the first treatment start.
 - **R4 cross-modality**: for planned PET or MR, the latest CT of R; for planned CT, the latest PET or MR of R within 12 months (often only referenced, so external).
@@ -396,7 +397,7 @@ A future `DicomQidoAdapter` (QIDO-RS / C-FIND) would replace this without touchi
 
 ### 9.8 Gap classification and holding site
 - `not_in_pacs` → gap "Studie existuje, snímky nejsou v PACS" (holding site: Motol department, request internally or to the performing site).
-- `not_found` → gap "Uvedeno v nálezu, ale nenalezeno" (holding site from `site_text`, matched against provider aliases; else "Neznámé pracoviště", the coordinator picks one).
+- `not_found` → gap "Uvedeno v nálezu, ale nenalezeno" (holding site from `site_text`, matched against provider aliases; if the reference has no `site_text`, the citing report is searched for a provider alias within 150 characters of the referenced date (the requesting hospital's own aliases are ignored) and the item is marked `holding_site_basis=text_near_date`; else "Neznámé pracoviště", the coordinator picks one).
 - Optional rule "suspicious time gap": no imaging of R for longer than the group's follow-up interval (default 6 months) before D → Requires attention, not a request.
 
 ### 9.9 Readiness
@@ -577,7 +578,7 @@ Script at the customer's table (about 3 minutes):
 5. "Posunout čas" → no reply → reminder → voice escalation; play the Czech voice message.
 6. "Simulovat odpověď: zasíláme přes ePACS" → ACKNOWLEDGED; "Simulovat doručení" → VERIFIED.
 7. Patient turns **Připraveno**, the meeting and dashboard counts update.
-8. Optional for InterSystems judges: show the same Task/ServiceRequest/Provenance in the IRIS FHIR API.
+8. For InterSystems judges: Management Portal, FHIR Explorer with our Task/ServiceRequest/Provenance, Visual Trace of the request, a SQL query on the FHIR projection, a Vector Search query and an MCP agent question (task T090).
 
 ---
 
@@ -610,11 +611,11 @@ Script at the customer's table (about 3 minutes):
 | M4 | Frontend MVP: layout, sidebar dates, dashboard, day view, add patient, patient detail with required studies table | demo steps 1 to 3 work in the browser |
 | M5 | Requests: providers, state machine, drafts, approve/approve-all, email sandbox (outbox + Mailpit), reply simulation + parsing, verification, readiness updates | demo steps 4, 6, 7 work |
 | M6 | Escalation: scheduler, nightly run, advance-time, reminders, voice message (ElevenLabs or fallback) | demo step 5 works |
-| M7 | IRIS: docker compose with the kit, `load_iris.py` for demo patients + subset, `IrisFhirStore`, writes visible in IRIS | the full demo runs with `FHIR_BACKEND=iris` |
+| M7 | IRIS Core Track, built in parallel from the start (see tasks.md, stages A to E); Stage A makes IRIS FHIR + IRIS SQL the default | the full demo runs on IRIS |
 | M8 | Evaluation scripts and `/stats` page | precision/recall numbers exist |
 | M9 | Polish: calendar in sidebar, presentation mode, request drawer, empty/error states | — |
 
-Stretch (only after M8): IRIS Vector Search over report chunks to find priors without explicit dates; MCP server or chat agent over the tools (fhir_search, sql_query, vector_search, check_pacs, create_task); IRIS Interoperability production with Business Operations per channel (email, FHIR POST) and Visual Trace; a local-model run (Ollama/vLLM) behind the same LLM client interface; checklist rules as FHIR PlanDefinition.
+IRIS features are not stretch goals: Vector Search, MCP server, Interoperability production with Visual Trace, FHIR SQL Builder, HL7 v2, DICOM, IHE MHD and IntegratedML are in the IRIS Core Track (tasks.md). Remaining stretch: a local-model run (Ollama/vLLM) behind the same LLM client interface; checklist rules as FHIR PlanDefinition.
 
 ---
 
@@ -645,11 +646,11 @@ Real PACS/ePACS/DICOM connections, real telephony, real email to real hospitals,
 
 | Milestone | Status | Notes |
 |---|---|---|
-| M0 | not started | `main.py` contains a working LLM gateway check |
-| M1 | not started | |
-| M2 | not started | |
-| M3 | not started | |
-| M4 | not started | |
+| M0 | done | `/api/health` green with `FHIR_BACKEND=local`; gateway call verified on both `-dz-eu` deployments; `main.py` is the original gateway check |
+| M1 | done (T073 reviewed by a human; three review fixes applied) | pipeline + CLI on 3 demo and 5 random patients with the real LLM; all 45 evidence quotes verified as exact substrings of their source |
+| M2 | partly done | planned exam, R1 to R5, open issues, FHIR writes of ServiceRequest, Observation, Provenance (local store); `Task` comes with US3 |
+| M3 | partly done | `Meeting`/`Case` models, case API (`GET /api/cases/{id}`, recheck, planned-exam PATCH, source documents), dev helper `scripts/create_case.py`; scheduling, dashboard and add-patient come with US2 |
+| M4 | partly done | scaffold and patient detail page only (`npm run dev:mock` shows it without a backend) |
 | M5 | not started | |
 | M6 | not started | |
 | M7 | not started | |
@@ -657,4 +658,18 @@ Real PACS/ePACS/DICOM connections, real telephony, real email to real hospitals,
 | M9 | not started | |
 
 Deviations from this spec:
-- (none yet)
+- `Meeting` and `Case` models live in Phase 2 (`app_db/models.py`) because `GET /api/cases/{id}` needs them. A `CaseResult` table stores the latest pipeline output as a JSON snapshot (no separate `RequiredItem` table yet; item ids are deterministic hashes). A failed recheck keeps the last result visible.
+- `config/providers.json` and site-alias resolution exist since US1 (needed for the holding site of a gap); US3 adds the request side.
+- Relative SQLite paths in `APP_DB_URL` are resolved against the repository root, not the working directory.
+- A case with no extractable planned exam is never Ready: it gets the open issue "Plánované vyšetření nebylo v dokumentaci nalezeno, zadejte ho ručně" (found on the real-data run, 2 of 10 patients).
+- References without any date are not turned into required items; they become one open issue per case (a request needs a date).
+- No prompt was changed from the section 9.2 and 9.3 text (prompt versions `priors-v1` and `planned-v1`).
+- T073 review fixes (sections 9.3, 9.6 and 9.8 above describe the final behavior): (1) planned exam choice prefers CT, MR, PET and MDT, RTG/SONO only as fallback; (2) R1 reads only the most recent report per (modality, region) and keeps at most 2 priors per (cited modality, region); the old "all reports of the last 12 months" part is gone; (3) a missing holding site is searched in the citing report near the referenced date.
+
+Dataset findings (M1, T073). Structure only; no patient content:
+- **Full text location.** `DocumentReference.content[0].attachment.data` is base64 `text/plain` with the complete note; `attachment.size` equals the UTF-8 byte length. A radiology report has its full text in `DiagnosticReport.conclusion` and, identical, in `presentedForm[0].data` (equal for all 3,196 reports). The department is `DocumentReference.custodian.display` (missing for about 70% of notes). MDT notes are recognizable by the second type coding (display "Onkologie MDT ...", code `Ambch3`); prescriptions are LOINC `57833-6` and are not used for planned-exam extraction.
+- `ImagingStudy.modality.display` is the performing workstation or department, not a body region; 98 of 3,254 studies have no modality (derived from the report headline); `KAT1`, `KAT2`, `ARYTMO` are cardiology catheter procedures and map to `OTHER`, `ANGIO` is kept.
+- Demo selection after the fixes: 125 of 1,830 patients pass the cheap stage-1 filter. The real pipeline accepted only 3 of the first 37 verified (before the fixes it was 5 of 16), because with fewer R1 items most patients no longer have both a `not_found` and a `not_in_pacs` gap. All 3 have a planned CT or PET (PET, CT, CT). Selection was stopped by hand after 37 of 60 planned verifications, so only 3 demo patients exist (`data/demo_patients.json`); to find more, rerun `scripts/pick_demo_patients.py --max-verify 60` (about 20 minutes with new LLM calls).
+- Review run (3 demo + 5 random patients with imaging): 45 evidence quotes, 0 not found in the source; planned exam found for 7 of 8 (CT 4, PET 1, SONO 1, MDT 1); 29 extracted references, 6 matched to an internal study, only 4 are RTG (before the fixes 33 of 52); 26 required items in total (1 to 8 per patient, before the fixes up to 16): R1 7, R2 7, R3 4, R4 3, R5 3, R1+R4 2.
+- Site inference: 0 of 8 `not_found` gaps got a site. All 8 reports have a date or quote anchor but none mentions any provider alias from `config/providers.json` (checked by counting alias hits in the whole report), so the search is not failing; the reports simply do not name the holder. The fallback "Neznámé pracoviště" applies and the coordinator picks the site.
+- Points for the next review: (1) one random patient with an MDT-only plan got a case with no modality (shown as "MDT") and 1 item; (2) the "time gap" issue fires for 2 of 8 patients; (3) planned dates written relatively ("za 6 měsíců") are resolved against the note date; (4) the demo set is small (3 patients), all `not_ready`; if the demo needs a Ready or attention-only patient, one must be added by hand.

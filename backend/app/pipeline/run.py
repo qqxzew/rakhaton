@@ -37,6 +37,7 @@ from app.pipeline.schemas import (
     Timeline,
 )
 from app.pipeline.timeline import build_timeline
+from app.scheduling.anchoring import compute_offset
 
 log = get_logger(__name__)
 
@@ -159,7 +160,7 @@ def run_case_check(case_id: str, store: FhirStore, llm: StructuredLlm) -> CaseCh
         case.readiness, case.readiness_reason = result.readiness, result.readiness_reason
         case.reference_date = result.reference_date
         if result.reference_date is not None:
-            case.date_offset_days = (case.meeting.date - result.reference_date).days
+            case.date_offset_days = compute_offset(case.meeting.date, result.reference_date)
         payload = json.loads(result.model_dump_json())
         if case.result is None:
             db.add(CaseResult(case_id=case_id, result=payload, computed_at=utcnow()))

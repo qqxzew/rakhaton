@@ -1,0 +1,9 @@
+[
+  {"id": "uro", "label": "Urologické nádory", "icd_prefixes": ["C61", "C64", "C65", "C66", "C67"]},
+  {"id": "lung", "label": "Nádory plic", "icd_prefixes": ["C33", "C34"]},
+  {"id": "breast", "label": "Nádory prsu", "icd_prefixes": ["C50"]},
+  {"id": "gi", "label": "GIT nádory", "icd_prefixes": ["C15", "C16", "C17", "C18", "C19", "C20", "C21", "C22", "C23", "C24", "C25"]},
+  {"id": "hn", "label": "Nádory hlavy a krku", "icd_prefixes": ["C00", "C01", "C02", "C03", "C04", "C05", "C06", "C07", "C08", "C09", "C10", "C11", "C12", "C13", "C14", "C30", "C31", "C32"]},
+  {"id": "cns", "label": "Nádory CNS", "icd_prefixes": ["C70", "C71", "C72"]},
+  {"id": "other", "label": "Ostatní", "icd_prefixes": []}
+]

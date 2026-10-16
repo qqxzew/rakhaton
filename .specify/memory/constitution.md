@@ -1,6 +1,6 @@
 <!--
 Sync Impact Report
-- Version change: template → 1.0.0
+- Version change: 1.0.0 → 1.1.0 (principle VII: IRIS is the core and primary store)
 - Principles added: I. Patient Data Stays Local; II. Human Approves Outbound Actions; III. Traceable AI Output;
   IV. Honest Simulation; V. No Clinical Recommendations; VI. One Working Scenario First; VII. FHIR as System of Record
 - Sections added: Technology and Data Constraints; Development Workflow and Quality Gates; Governance
@@ -54,9 +54,10 @@ Rationale: a 24-hour hackathon with one developer driving AI agents.
 
 ### VII. FHIR as System of Record
 Clinical facts are read from HL7 FHIR R4, and our outputs (planned exam, extracted references, tasks, messages,
-provenance, audit events) are written back as FHIR R4 resources, stored in InterSystems IRIS for Health when it
-is available and in a local file store otherwise, through one interface. App-only state (meetings, cases, UI
-flags) may live in a relational store.
+provenance, audit events) are written back as FHIR R4 resources in InterSystems IRIS for Health, which is the
+core of the product: IRIS FHIR is the primary store, app state lives in IRIS SQL, and the request loop runs as an
+IRIS Interoperability production. A local file store exists only for unit tests and as a fallback, behind the same
+interface.
 Rationale: interoperability is the customer's real-world constraint and the InterSystems prize criterion.
 
 ## Technology and Data Constraints
@@ -85,4 +86,4 @@ then CLAUDE.md. Amendments are made by editing this file with a version bump (MA
 redefined; MINOR: principle or section added; PATCH: wording) and a note in the Sync Impact Report. Every plan's
 Constitution Check must verify principles I to VII.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-16 | **Last Amended**: 2026-10-16
+**Version**: 1.1.0 | **Ratified**: 2026-10-16 | **Last Amended**: 2026-10-16

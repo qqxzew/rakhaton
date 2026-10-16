@@ -1,0 +1,30 @@
+# Rules that decide which prior studies are required for a planned examination.
+# Defaults apply to every diagnosis group; "groups" overrides single settings per group id.
+defaults:
+  R1:   # priors cited by the latest report of each (modality, region) relevant to the planned exam
+    enabled: true
+    max_per_group: 2   # keep the latest N cited priors per (cited modality, region)
+  R2:   # latest and second-latest internal study of the same modality and region
+    enabled: true
+    count: 2
+  R3:   # baseline: latest study of the region before treatment start
+    enabled: true
+  R4:   # complementary modality of the same region
+    enabled: true
+    window_months: 12
+  R5:   # study closest before the latest MDT document
+    enabled: true
+
+groups: {}
+# Example override:
+# groups:
+#   uro:
+#     R4: {enabled: false}
+
+reasons:
+  R1: "Srovnávací vyšetření uvedené v nálezu z {report_date}"
+  R2: "Poslední {modality} stejné oblasti"
+  R2_previous: "Předposlední {modality} stejné oblasti"
+  R3: "Výchozí vyšetření před zahájením léčby"
+  R4: "Doplňující vyšetření ({modality}) stejné oblasti"
+  R5: "Vyšetření před posledním MDT"

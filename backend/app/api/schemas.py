@@ -131,3 +131,104 @@ class PlannedExamPatch(BaseModel):
     regions: list[str] = Field(default_factory=list, max_length=10)
     date: str | None = None
     coordinator: str | None = Field(default=None, max_length=100)
+
+
+class CaseCreate(BaseModel):
+    patient_id: str = Field(min_length=1, max_length=64)
+    display_name: str | None = Field(default=None, max_length=200)
+    group_id: str = Field(min_length=1, max_length=32)
+    meeting_id: str = Field(min_length=1, max_length=64)
+
+
+class DiagnosisGroupView(BaseModel):
+    id: str
+    label: str
+
+
+class ReadinessCounts(BaseModel):
+    ready: int = 0
+    attention: int = 0
+    not_ready: int = 0
+
+
+class MeetingSummary(BaseModel):
+    id: str
+    label: str
+    date: str
+    time: str
+    readiness: ReadinessState
+    reason: str
+    case_count: int
+    counts: ReadinessCounts
+    eligible_groups: list[str]
+    accepts_registrations: bool
+
+
+class CaseRow(BaseModel):
+    id: str
+    patient_id: str
+    display_name: str
+    diagnosis: str | None
+    readiness: ReadinessState
+    reason: str
+    check_status: str
+
+
+class MeetingDetail(MeetingSummary):
+    cases: list[CaseRow]
+
+
+class DayView(BaseModel):
+    date: str
+    readiness: ReadinessState | None
+    reason: str | None
+    counts: ReadinessCounts
+    meetings: list[MeetingDetail]
+
+
+class DashboardDay(BaseModel):
+    date: str
+    readiness: ReadinessState | None
+    reason: str | None
+    meetings: list[MeetingSummary]
+
+
+class DashboardTotals(BaseModel):
+    meetings: int
+    cases: int
+    counts: ReadinessCounts
+
+
+class Dashboard(BaseModel):
+    start: str
+    end: str
+    days: list[DashboardDay]
+    totals: DashboardTotals
+    readiness: ReadinessState | None
+    reason: str | None
+
+
+class ScheduleDate(BaseModel):
+    date: str
+    readiness: ReadinessState
+    reason: str
+    meeting_count: int
+    case_count: int
+
+
+class EligibleMeeting(BaseModel):
+    id: str
+    label: str
+    date: str
+    time: str
+
+
+class PatientSearchResult(BaseModel):
+    id: str
+    display_name: str
+    sex: str
+    age_band: str
+    diagnoses: list[Diagnosis]
+    suggested_group: str
+    has_imaging: bool
+    has_documents: bool
