@@ -154,6 +154,10 @@ class PriorReference(BaseModel):
     date_valid: bool = True
     flags: list[str] = Field(default_factory=list)
     matched_study_id: str | None = None
+    # Vector Search proposal for a reference without a date (low confidence, never a confirmed match).
+    proposed_study_id: str | None = None
+    proposed_report_id: str | None = None
+    proposed_score: float | None = None
 
     @property
     def low_confidence(self) -> bool:
@@ -216,6 +220,9 @@ class RequiredItem(BaseModel):
     # Set by FhirHospitalAdapter: how the holding hospital was found and its ImagingStudy there.
     located_by: str | None = None
     provider_study_ref: str | None = None
+    # Set for items proposed by Vector Search (undated reference): the similar report and its cosine score.
+    proposed_report_id: str | None = None
+    similarity_score: float | None = None
     simulated: bool = True
 
 

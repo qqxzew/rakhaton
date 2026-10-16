@@ -7,7 +7,6 @@ approval and sending stay in the app (hard rule 3).
 
 from __future__ import annotations
 
-import os
 import re
 import uuid
 from datetime import UTC, datetime
@@ -30,8 +29,6 @@ _FORBIDDEN_SQL = re.compile(
     r"load|set|into|lock|kill|use)\b",
     re.IGNORECASE,
 )
-VECTOR_TABLE = "PacsVector.ReportChunk"
-EMBED_MODEL = os.environ.get("VECTOR_EMBED_MODEL", "BAAI/bge-small-en-v1.5")
 
 
 class ToolError(ValueError):
@@ -139,37 +136,27 @@ def _jsonable(value: Any) -> Any:
 # --- Vector search ------------------------------------------------------------------------------
 
 
-def _vector_sql(top: int) -> str:
-    """The only place that knows the PacsVector.ReportChunk layout."""
-    return (
-        f"SELECT TOP {int(top)} ReportId, ChunkText, VECTOR_COSINE(Embedding, TO_VECTOR(:q, DOUBLE)) AS Score "
-        f"FROM {VECTOR_TABLE} WHERE PatientId = :pid ORDER BY Score DESC"
-    )
-
-
-def _embed(query: str) -> list[float]:
-    from fastembed import TextEmbedding
-
-    return [float(x) for x in next(iter(TextEmbedding(EMBED_MODEL).embed([query])))]
-
-
 def vector_search(patient_id: str, query: str, top: int = 5) -> dict:
-    """Semantic search over the patient's report chunks (IRIS Vector Search)."""
-    from app.app_db.session import get_engine
+    """Semantic search over the patient's report chunks (IRIS Vector Search, index built by D1:
+    app/search/vector_store.py, table PacsVector.ReportChunk, same local multilingual model)."""
+    from app.search import vector_store as vs
 
     if not _SAFE.match(patient_id):
         raise ToolError("invalid patient id")
     top = max(1, min(int(top), 10))
     try:
-        with get_engine().connect() as conn:
-            conn.execute(text(f"SELECT TOP 1 1 FROM {VECTOR_TABLE}"))
-            vector = ",".join(f"{x:.6f}" for x in _embed(query))
-            rows = conn.execute(text(_vector_sql(top)), {"q": vector, "pid": patient_id}).fetchall()
-    except Exception as exc:  # noqa: BLE001 - index missing or embedding unavailable
+        conn = vs.connect()
+        try:
+            hits = vs.search(conn, query, patient_id=patient_id, top_k=top)
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 - index missing or IRIS/embedding unavailable
         log.info("vector index not available", extra={"fields": {"error": type(exc).__name__}})
-        return {"available": False, "message": "index not available (PacsVector.ReportChunk is not built yet)",
+        return {"available": False, "message": f"index not available ({vs.TABLE})",
                 "results": [], "sources": []}
-    results = [{"report_id": r[0], "text": r[1], "score": float(r[2])} for r in rows]
+    results = [{"report_id": h.source_id, "source_type": h.source_type,
+                "date": h.doc_date.isoformat() if h.doc_date else None,
+                "text": h.text, "score": h.score} for h in hits]
     return {"available": True, "results": results, "sources": [r["report_id"] for r in results]}
 
 
