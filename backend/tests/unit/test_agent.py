@@ -120,9 +120,32 @@ def test_fhir_search_validates_input():
     assert "error" in tools.call_tool("fhir_search", {"resource_type": "Patient", "params": {"a b": "1"}})
 
 
-def test_vector_search_reports_missing_index():
+def test_vector_search_reports_missing_index(monkeypatch):
+    from app.search import vector_store as vs
+
+    def boom():
+        raise RuntimeError("no IRIS in unit tests")
+
+    monkeypatch.setattr(vs, "connect", boom)
     out = tools.vector_search("PAC-TEST-0001", "q")
     assert out["available"] is False and out["results"] == []
+
+
+def test_vector_search_uses_iris_index(monkeypatch):
+    from datetime import date as _date
+
+    from app.search import vector_store as vs
+
+    class FakeConn:
+        def close(self):
+            pass
+
+    hit = vs.Hit("DiagnosticReport", "rep-TEST-1", 0, _date(2026, 1, 2), "CT", "synthetic text", 0.91)
+    monkeypatch.setattr(vs, "connect", lambda: FakeConn())
+    monkeypatch.setattr(vs, "search", lambda conn, query, patient_id=None, top_k=5, **kw: [hit])
+    out = tools.vector_search("PAC-TEST-0001", "q", top=3)
+    assert out["available"] is True
+    assert out["sources"] == ["rep-TEST-1"] and out["results"][0]["score"] == 0.91
 
 
 def test_request_status_stub_and_unknown_tool():
