@@ -699,3 +699,13 @@ Deviations from this spec:
 - Homolka is a separate simulated provider and endpoint next to NNH (in reality the same hospital), because the challenge asks for three hospital endpoints.
 - IRIS holds no lab Observations (not used by the pipeline, about 90% of resources); `FHIR_BACKEND=local` still reads them from the bundle files.
 - Observation `imaging-reference` uses `focus` for the source report because R4 `derivedFrom` cannot point to a DiagnosticReport.
+
+### Stage D3 (T086, branch `iris-d3`): done
+- Simulated RIS feed as HL7 v2 into the production (new items in `PacsComparator.Production`, classes `iris/src/PacsComparator/HL7/`): `BS.Tcp` (MLLP, port 4561 inside the container, not published, AckMode Immediate), `BS.File` (`*.hl7` in `/tmp/pacs-hl7/in/`, archive `done/`), `BP.Route`, `BO.BackendHook`. ORM^O01 becomes a FHIR `ServiceRequest` (`RIS-<placer order>`; modality DICOM code in OBR-24, regions OBR-15.4, planned date OBR-27.4, ORC-1 CA gives `revoked`), ORU^R01 a `DiagnosticReport` (`RIS-<filler order>`, OBX-5 lines in `conclusion`, `basedOn` by placer identifier). Both are written to `/fhir/r4` through `BO.FhirWriter`, tagged `urn:pacs-comparator:simulation|simulated` and `urn:pacs-comparator:hl7-source|ORM^O01` or `|ORU^R01`; the patient must exist in FHIR. Every message is a Visual Trace session (Tcp/File service, Route, FhirWriter, BackendHook).
+- Trigger: after a ServiceRequest, `BO.BackendHook` POSTs `{patient_id, resource_type, resource_id}` to `HookUrl` (default `http://host.docker.internal:8000/api/hooks/fhir-written`, best effort: a missing backend only logs a warning); `app/api/hooks.py` sets all non-running cases of the patient to `running` and reruns the check. Note: the pipeline does not read RIS ServiceRequests yet, it only rechecks.
+- Install without restarting the production: `uv run python scripts/iris_hl7.py [--hook-url ...]` in `backend/` (the items are also in Production.cls, so `iris_production.py` installs them too).
+- Simulator `scripts/simulate_ris.py --kind orm|oru|both [--transport iris-mllp|mllp|file] [--patient ID] [--modality CT] [--print-only]`; builder and Python reference mapping in `app/exchange/hl7.py` (tests `tests/test_hl7_ris.py`, synthetic).
+
+Deviations from this spec:
+- ORM/ORU mapping is hand-written ObjectScript (`HL7.Map`) instead of the built-in HL7-to-SDA-to-FHIR path, so that body site, planned date and the simulation tag are exact; the Python mirror in `app/exchange/hl7.py` pins the contract in unit tests.
+- Planned dates are written as FHIR dates (no time of day).

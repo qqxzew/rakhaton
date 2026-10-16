@@ -38,6 +38,29 @@ XData ProductionDefinition
     <Setting Target="Host" Name="FhirBase">http://localhost:52773/fhir/r4</Setting>
     <Setting Target="Host" Name="Credentials">PacsComparator.Iris</Setting>
   </Item>
+  <Item Name="PacsComparator.HL7.BS.Tcp" Category="HL7" ClassName="PacsComparator.HL7.BS.Tcp" PoolSize="1" Enabled="true" Foreground="false" Comment="HL7 v2 MLLP from the simulated RIS (port 4561 inside the container)" LogTraceEvents="true" Schedule="">
+    <Setting Target="Adapter" Name="Port">4561</Setting>
+    <Setting Target="Adapter" Name="StayConnected">-1</Setting>
+    <Setting Target="Host" Name="MessageSchemaCategory">2.5</Setting>
+    <Setting Target="Host" Name="TargetConfigNames">PacsComparator.HL7.BP.Route</Setting>
+    <Setting Target="Host" Name="AckMode">Immediate</Setting>
+  </Item>
+  <Item Name="PacsComparator.HL7.BS.File" Category="HL7" ClassName="PacsComparator.HL7.BS.File" PoolSize="1" Enabled="true" Foreground="false" Comment="HL7 v2 file fallback from the simulated RIS (folder inside the container)" LogTraceEvents="true" Schedule="">
+    <Setting Target="Adapter" Name="FilePath">/tmp/pacs-hl7/in/</Setting>
+    <Setting Target="Adapter" Name="FileSpec">*.hl7</Setting>
+    <Setting Target="Adapter" Name="ArchivePath">/tmp/pacs-hl7/done/</Setting>
+    <Setting Target="Adapter" Name="WorkPath">/tmp/pacs-hl7/work/</Setting>
+    <Setting Target="Adapter" Name="CallInterval">2</Setting>
+    <Setting Target="Host" Name="MessageSchemaCategory">2.5</Setting>
+    <Setting Target="Host" Name="TargetConfigNames">PacsComparator.HL7.BP.Route</Setting>
+  </Item>
+  <Item Name="PacsComparator.HL7.BP.Route" Category="HL7" ClassName="PacsComparator.HL7.BP.Route" PoolSize="1" Enabled="true" Foreground="false" Comment="ORM^O01 to ServiceRequest, ORU^R01 to DiagnosticReport, then the backend hook" LogTraceEvents="true" Schedule="">
+    <Setting Target="Host" Name="FhirBase">http://localhost:52773/fhir/r4</Setting>
+    <Setting Target="Host" Name="Credentials">PacsComparator.Iris</Setting>
+  </Item>
+  <Item Name="PacsComparator.HL7.BO.BackendHook" Category="HL7" ClassName="PacsComparator.HL7.BO.BackendHook" PoolSize="1" Enabled="true" Foreground="false" Comment="Tells the backend to re-check the cases of the patient (best effort)" LogTraceEvents="true" Schedule="">
+    <Setting Target="Host" Name="HookUrl">http://host.docker.internal:8000/api/hooks/fhir-written</Setting>
+  </Item>
 </Production>
 }
 
