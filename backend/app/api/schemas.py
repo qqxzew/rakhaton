@@ -84,6 +84,13 @@ class RequestRef(BaseModel):
     updated_at: str
 
 
+class ProposedMatch(BaseModel):
+    study_id: str
+    report_id: str
+    score: float
+    simulated: bool = False
+
+
 class RequiredItemView(BaseModel):
     id: str
     reasons: list[str]
@@ -98,6 +105,7 @@ class RequiredItemView(BaseModel):
     request: RequestRef | None = None
     simulated: bool = True
     note: str | None = None
+    proposed_match: ProposedMatch | None = None
 
 
 class OpenIssueView(BaseModel):

@@ -15,6 +15,7 @@ from app.api.schemas import (
     OpenIssueView,
     PatientView,
     PlannedExamView,
+    ProposedMatch,
     RequiredItemView,
     TimelineEntry,
 )
@@ -130,6 +131,9 @@ def build_case_detail(case: Case, result: CaseCheckResult, adapter: Availability
             holding_site=HoldingSite(id=item.holding_site_id, name=item.holding_site_name or "")
             if item.holding_site_id else None,
             evidence=_evidence(item.evidence), simulated=item.simulated, note=item.note,
+            proposed_match=ProposedMatch(study_id=item.study_id, report_id=item.proposed_report_id,
+                                         score=item.similarity_score or 0.0)
+            if item.proposed_report_id and item.study_id else None,
         ))
 
     planned = result.planned_exam

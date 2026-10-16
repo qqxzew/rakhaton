@@ -37,6 +37,9 @@ from app.pipeline.schemas import (
     Timeline,
 )
 from app.pipeline.timeline import build_timeline
+from app.search.undated import default_backend as default_vector_backend
+from app.search.undated import proposal_items, propose_undated_matches
+from app.search.vector_store import VectorBackend
 
 log = get_logger(__name__)
 
@@ -77,6 +80,7 @@ def run_patient_check(
     planned_override: dict | None = None,
     group_id: str | None = None,
     adapter: AvailabilityAdapter | None = None,
+    vector: VectorBackend | None = None,
 ) -> CaseCheckResult:
     """Pure pipeline run for one patient. Dates stay in the patient's own frame."""
     adapter = adapter or default_adapter()
@@ -98,7 +102,10 @@ def run_patient_check(
         references.extend(found)
         notes.extend(dropped)
     references = match_references(references, timeline.studies)
-
+    # Vector Search hook (D1): propose low-confidence matches for undated references.
+    vector_backend = vector or default_vector_backend()
+    references, vector_notes = propose_undated_matches(references, timeline, vector_backend)
+    notes.extend(vector_notes)
     planned: PlannedExam | None = None
     latest_doc = max((d.date for d in timeline.documents if d.date), default=None)
     try:
@@ -120,6 +127,9 @@ def run_patient_check(
     items = build_items(patient_id, candidates, timeline.studies, references, adapter)
     items, adapter_issues = adapter.enrich(items)  # IRIS Core hook: holding hospital located via FHIR search
     extra_issues += adapter_issues
+    # Vector Search hook (D1): items for proposed matches of undated references.
+    items, vector_issues = proposal_items(references, items, timeline, planned, reference_date, adapter)
+    extra_issues += vector_issues
     issues = open_issues(timeline, references, items, planned, reference_date) + extra_issues
     readiness, reason = compute_readiness("done", items, issues)
     return CaseCheckResult(
