@@ -21,6 +21,7 @@ from app.fhir_store.mappers import write_case_outputs
 from app.llm.client import ExtractionFailed, GatewayBackend, LlmBackend, StructuredLlm
 from app.logging import configure_logging, get_logger
 from app.pipeline.availability import AvailabilityAdapter, default_adapter
+from app.pipeline.checklist import FinderFactory, discover_missing, plan_checklist
 from app.pipeline.extract_planned import choose_planned_exam, extract_planned_exams
 from app.pipeline.extract_priors import extract_references
 from app.pipeline.gaps import build_items, open_issues
@@ -84,6 +85,7 @@ def run_patient_check(
     group_id: str | None = None,
     adapter: AvailabilityAdapter | None = None,
     vector: VectorBackend | None = None,
+    discovery_finders: list[FinderFactory] | None = None,
 ) -> CaseCheckResult:
     """Pure pipeline run for one patient. Dates stay in the patient's own frame."""
     adapter = adapter or default_adapter()
@@ -130,7 +132,8 @@ def run_patient_check(
         reference_date = (latest_doc or max((s.date for s in timeline.studies), default=date.today())) \
             + timedelta(days=1)
 
-    candidates = compute_required(timeline, references, planned, reference_date, load_rules_config(group_id))
+    rules_cfg = load_rules_config(group_id)
+    candidates = compute_required(timeline, references, planned, reference_date, rules_cfg)
     items = build_items(patient_id, candidates, timeline.studies, references, adapter,
                         {d.id: d.text for d in timeline.documents})
     items, adapter_issues = adapter.enrich(items)  # IRIS Core hook: holding hospital located via FHIR search
@@ -138,6 +141,12 @@ def run_patient_check(
     # Vector Search hook (D1): items for proposed matches of undated references.
     items, vector_issues = proposal_items(references, items, timeline, planned, reference_date, adapter)
     extra_issues += vector_issues
+    # Checklist hook (CHK): ask the simulated hospitals for must-have modalities that are not known at all.
+    chk_cfg = rules_cfg["rules"].get("CHK", {})
+    if chk_cfg.get("enabled", True) and chk_cfg.get("discovery", True):
+        plan = plan_checklist(timeline, references, planned, reference_date, chk_cfg)
+        items, chk_issues = discover_missing(patient_id, plan, items, discovery_finders)
+        extra_issues += chk_issues
     issues = open_issues(timeline, references, items, planned, reference_date) + extra_issues
     readiness, reason = compute_readiness("done", items, issues)
     return CaseCheckResult(

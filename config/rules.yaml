@@ -14,12 +14,19 @@ defaults:
     window_months: 12
   R5:   # study closest before the latest MDT document
     enabled: true
+  CHK:  # modality checklist: the latest study of each listed modality before the planned exam
+    enabled: true
+    modalities: [CT, MR, RTG, PET]   # PET stands for PET-CT; RTG is limited to the planned region (default chest)
+    lookback_months: 24
+    must_have: []        # modalities that are required even without any evidence in the lookback window
+    discovery: true      # ask the (simulated) hospitals when a must-have modality is not known at all
 
 groups: {}
 # Example override:
 # groups:
 #   uro:
 #     R4: {enabled: false}
+#     CHK: {must_have: [CT, PET], lookback_months: 12}
 
 reasons:
   R1: "Srovnávací vyšetření uvedené v nálezu z {report_date}"
@@ -28,3 +35,4 @@ reasons:
   R3: "Výchozí vyšetření před zahájením léčby"
   R4: "Doplňující vyšetření ({modality}) stejné oblasti"
   R5: "Vyšetření před posledním MDT"
+  CHK: "Kontrolní seznam: poslední {modality}"
