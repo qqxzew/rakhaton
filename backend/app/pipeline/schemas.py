@@ -233,6 +233,14 @@ class OpenIssue(BaseModel):
     type: IssueType
     text: str
     item_id: str | None = None
+    acknowledged: bool = False
+    ack_note: str | None = None
+
+    @property
+    def key(self) -> str:
+        import hashlib
+
+        return hashlib.sha1(f"{self.type}|{self.text}".encode()).hexdigest()[:16]
 
 
 class CaseCheckResult(BaseModel):

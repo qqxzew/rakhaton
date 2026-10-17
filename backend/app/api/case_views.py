@@ -182,7 +182,8 @@ def build_case_detail(case: Case, result: CaseCheckResult, adapter: Availability
         ),
         patient=patient, planned_exam=planned_view, timeline=_timeline(result, offset, adapter),
         items=items,
-        open_issues=[OpenIssueView(type=("data" if i.type == "no_priors" else i.type), text=i.text)
+        open_issues=[OpenIssueView(type=("data" if i.type == "no_priors" else i.type), text=i.text, key=i.key,
+                                   acknowledged=i.acknowledged, ack_note=i.ack_note)
                      for i in result.open_issues],
         check_status=case.check_status, notes=result.notes,
     )

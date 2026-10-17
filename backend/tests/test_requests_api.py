@@ -236,3 +236,26 @@ def test_request_is_shared_between_cases_of_one_patient(client_and_fake):
     assert out.json()["approved"] == 1
     detail = client.get("/api/cases/CASE-TEST-REQ2").json()
     assert detail["items"][0]["request"]["state"] == "SENT"
+
+
+def test_acknowledged_issue_no_longer_blocks_readiness(client_and_fake):
+    from app.app_db.models import IssueAck
+    from app.pipeline.schemas import OpenIssue
+
+    client, fake = client_and_fake
+    case_id = _seed_case()
+    issue = {"type": "data", "text": "2 odkazy bez data (synteticky test)"}
+    with session_scope() as db:
+        for ack in db.query(IssueAck).filter(IssueAck.case_id == case_id).all():
+            db.delete(ack)
+        row = db.get(CaseResult, case_id)
+        row.result = {**row.result, "open_issues": [issue]}
+    client.post("/api/items/ITEM-TEST-1/waive", json={"reason": "Není potřeba", "coordinator": "Koordinátor"})
+    with session_scope() as db:
+        assert db.get(Case, case_id).readiness == "attention"
+    key = OpenIssue(**issue).key
+    out = client.post(f"/api/cases/{case_id}/issues/{key}/acknowledge", json={"coordinator": "Koordinátor"})
+    assert out.status_code == 200 and out.json()["readiness"] == "ready"
+    detail = client.get(f"/api/cases/{case_id}").json()
+    assert detail["open_issues"][0]["acknowledged"] is True and detail["open_issues"][0]["key"] == key
+    assert client.post(f"/api/cases/CASE-NOPE/issues/{key}/acknowledge", json={"coordinator": "K"}).status_code == 404

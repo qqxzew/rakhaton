@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.api import cache as api_cache
 from app.api.cases import get_fhir_store, get_llm
 from app.api.errors import DependencyUnavailable, NotFoundError, ValidationFailed
-from app.app_db.models import Case, CaseResult, ItemWaiver, Meeting, utcnow
+from app.app_db.models import Case, CaseResult, IssueAck, ItemWaiver, Meeting, utcnow
 from app.app_db.session import get_db as _db_dependency
 from app.config import today
 from app.exchange.hospitals import HospitalError, make_client, provider, request
@@ -69,6 +69,11 @@ class WaiveBody(BaseModel):
     reason: str = Field(min_length=3, max_length=400)
     coordinator: str = Field(min_length=1, max_length=100)
     case_id: str | None = None
+
+
+class AckBody(BaseModel):
+    coordinator: str = Field(min_length=1, max_length=100)
+    note: str = Field(default="", max_length=400)
 
 
 class NightlyBody(BaseModel):
@@ -297,6 +302,26 @@ def waive_item(item_id: str, body: WaiveBody, db: Session = Depends(_db_dependen
     return {"case_id": case.id, "item_id": item_id, "waived": True, "reason": waiver.reason,
             "actor": waiver.actor, "waived_at": waiver.waived_at.isoformat(timespec="seconds"),
             "cancelled_request": cancelled, "cancel_error": cancel_error,
+            "readiness": case.readiness, "readiness_reason": case.readiness_reason}
+
+
+@router.post("/cases/{case_id}/issues/{issue_key}/acknowledge")
+def acknowledge_issue(case_id: str, issue_key: str, body: AckBody, db: Session = Depends(_db_dependency),
+                      client: ProductionClient = Depends(production)) -> dict:
+    """Coordinator acknowledges an open issue (who, when, note); it then no longer blocks readiness."""
+    case = db.get(Case, case_id)
+    if case is None:
+        raise NotFoundError("Případ nenalezen")
+    ack = db.get(IssueAck, (case_id, issue_key))
+    if ack is None:
+        ack = IssueAck(case_id=case_id, issue_key=issue_key, note=body.note, actor=body.coordinator,
+                       acked_at=utcnow())
+        db.add(ack)
+    else:
+        ack.note, ack.actor, ack.acked_at = body.note, body.coordinator, utcnow()
+    db.commit()
+    _refresh(db, client, {case_id})
+    return {"case_id": case_id, "issue_key": issue_key, "acknowledged": True, "actor": ack.actor,
             "readiness": case.readiness, "readiness_reason": case.readiness_reason}
 
 

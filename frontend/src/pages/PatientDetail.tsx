@@ -92,7 +92,7 @@ export default function PatientDetail() {
         requestsAvailable={data.requests_available !== false}
         onShowRequest={setRequestId}
       />
-      <OpenIssuesPanel issues={data.open_issues} />
+      <OpenIssuesPanel issues={data.open_issues} caseId={caseId} />
       {!presentation && <AgentChat caseId={caseId} onOpenSource={openSource} onShowRequest={setRequestId} />}
       {requestId && <RequestDrawer requestId={requestId} onClose={closeRequest} />}
       {source && (

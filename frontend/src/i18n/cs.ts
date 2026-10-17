@@ -353,6 +353,9 @@ export const cs = {
   issues: {
     title: "Otevřené problémy",
     empty: "Žádné otevřené problémy",
+    acknowledge: "Vzít na vědomí",
+    acknowledged: "Vzato na vědomí",
+    coordinatorPrompt: "Jméno koordinátora",
   },
   drawer: {
     title: "Zdrojový dokument",

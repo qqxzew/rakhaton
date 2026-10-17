@@ -135,6 +135,9 @@ export interface RequiredItem {
 export interface OpenIssue {
   type: IssueType;
   text: string;
+  key?: string | null;
+  acknowledged?: boolean;
+  ack_note?: string | null;
 }
 
 export interface CaseDetail {

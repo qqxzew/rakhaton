@@ -113,6 +113,19 @@ class CaseResult(Base):
     case: Mapped[Case] = relationship(back_populates="result")
 
 
+class IssueAck(Base):
+    """A coordinator acknowledged an open issue (who, when, optional note). Keys are stable hashes of the
+    issue type and text, so an acknowledgement survives pipeline reruns."""
+
+    __tablename__ = "issue_ack"
+
+    case_id: Mapped[str] = mapped_column(ForeignKey("case.id"), primary_key=True)
+    issue_key: Mapped[str] = mapped_column(String(32), primary_key=True)
+    note: Mapped[str] = mapped_column(String(400), default="")
+    actor: Mapped[str] = mapped_column(String(100))
+    acked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class ItemWaiver(Base):
     """A coordinator's decision that a required item is not needed (who, when, why). Item ids are stable
     hashes, so a waiver survives pipeline reruns."""

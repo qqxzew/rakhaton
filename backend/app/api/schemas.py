@@ -122,6 +122,9 @@ class RequiredItemView(BaseModel):
 class OpenIssueView(BaseModel):
     type: IssueType
     text: str
+    key: str | None = None
+    acknowledged: bool = False
+    ack_note: str | None = None
 
 
 class CaseDetail(BaseModel):

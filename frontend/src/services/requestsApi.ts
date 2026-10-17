@@ -137,6 +137,9 @@ export const requestsApi = {
     post<ActionResult>(`/requests/${enc(id)}/simulate-delivery`, body),
   waive: (itemId: string, caseId: string, reason: string, coordinator: string) =>
     post<WaiveResult>(`/items/${enc(itemId)}/waive`, { reason, coordinator, case_id: caseId }),
+  acknowledge: (caseId: string, key: string, coordinator: string, note = "") =>
+    post<{ readiness: string; readiness_reason: string }>(
+      `/cases/${enc(caseId)}/issues/${enc(key)}/acknowledge`, { coordinator, note }),
   nightly: () => post<NightlyResult>("/demo/nightly-run", { days: 2 }),
   summary: () => call<DemoSummary>("/demo/summary?days=7"),
   advance: (hours: number) => post<{ offsetSeconds?: number; now?: string; ticked?: unknown[] }>("/demo/advance-time", { hours }),

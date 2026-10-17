@@ -10,7 +10,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.app_db.models import Case, ItemWaiver
+from app.app_db.models import Case, IssueAck, ItemWaiver
 from app.config import get_settings
 from app.logging import get_logger
 from app.pipeline.readiness import compute_readiness
@@ -50,8 +50,13 @@ def waivers_for(db: Session, case_id: str) -> dict[str, ItemWaiver]:
     return {w.item_id: w for w in rows}
 
 
+def acks_for(db: Session, case_id: str) -> dict[str, IssueAck]:
+    rows = db.scalars(select(IssueAck).where(IssueAck.case_id == case_id)).all()
+    return {a.issue_key: a for a in rows}
+
+
 def overlay_result(result: CaseCheckResult, check_status: str, waivers: dict[str, ItemWaiver],
-                   requests: dict[str, dict]) -> CaseCheckResult:
+                   requests: dict[str, dict], acks: dict[str, IssueAck] | None = None) -> CaseCheckResult:
     """Copy of the result with waivers and verified deliveries applied and readiness recomputed."""
     items = []
     for item in result.items:
@@ -65,9 +70,18 @@ def overlay_result(result: CaseCheckResult, check_status: str, waivers: dict[str
                           note=f"Doručeno a ověřeno ({req.get('requestId')}, simulace)")
         items.append(item.model_copy(update=update) if update else item)
     settled = {i.id for i in items if i.waived or (requests.get(i.id) or {}).get("state") in DONE_STATES}
-    issues = [i for i in result.open_issues if not (i.item_id and i.item_id in settled)]
+    issues = []
+    for issue in result.open_issues:
+        if issue.item_id and issue.item_id in settled:
+            continue
+        ack = (acks or {}).get(issue.key)
+        if ack is not None:
+            note = f"{ack.actor}: {ack.note}" if ack.note else ack.actor
+            issue = issue.model_copy(update={"acknowledged": True, "ack_note": note})
+        issues.append(issue)
     pending = any(r.get("state") == "DRAFTED" for r in requests.values())
-    readiness, reason = compute_readiness(check_status, items, issues, pending_approval=pending)
+    open_issues = [i for i in issues if not i.acknowledged]
+    readiness, reason = compute_readiness(check_status, items, open_issues, pending_approval=pending)
     return result.model_copy(update={"items": items, "open_issues": issues, "readiness": readiness,
                                      "readiness_reason": reason})
 
@@ -96,7 +110,7 @@ def refresh_case(db: Session, case: Case, client: ProductionClient | None
         except ProductionError as exc:
             log.warning("production unavailable for overlay", extra={"fields": {"error": str(exc)[:120]}})
     result = overlay_result(CaseCheckResult.model_validate(case.result.result), case.check_status,
-                            waivers_for(db, case.id), requests or {})
+                            waivers_for(db, case.id), requests or {}, acks_for(db, case.id))
     if case.check_status == "done" and (client is None or requests is not None):
         case.readiness, case.readiness_reason = result.readiness, result.readiness_reason[:400]
     return result, requests
