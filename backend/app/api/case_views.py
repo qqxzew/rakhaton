@@ -26,6 +26,7 @@ from app.config import today
 from app.pipeline.availability import AvailabilityAdapter, DatasetFlagAdapter
 from app.pipeline.rules import fmt_date
 from app.pipeline.schemas import CaseCheckResult, PartialDate, Study
+from app.requests.overlay import confirm_key
 from app.scheduling.anchoring import compute_offset, shift_iso
 
 _FIRST_F = ["Jana", "Eva", "Marie", "Hana", "Lenka", "Petra", "Alena", "Věra", "Zuzana", "Ivana"]
@@ -126,12 +127,13 @@ def _request_ref(row: dict | None) -> RequestRef | None:
         return None
     return RequestRef(id=row["requestId"], state=row.get("state", ""), updated_at=row.get("updatedAt", ""),
                       provider_name=(row.get("provider") or {}).get("name") or None,
-                      approved_by=row.get("approvedBy") or None)
+                      approved_by=row.get("approvedBy") or None, approved_at=row.get("approvedAt") or None,
+                      attempts=int(row.get("attempts") or 0))
 
 
 def build_case_detail(case: Case, result: CaseCheckResult, adapter: AvailabilityAdapter | None = None,
                       display_name: str | None = None, requests: dict[str, dict] | None = None,
-                      waivers: dict | None = None) -> CaseDetail:
+                      waivers: dict | None = None, acks: dict | None = None) -> CaseDetail:
     adapter = adapter or DatasetFlagAdapter()
     offset = compute_offset(case.meeting.date, result.reference_date, case.date_offset_days)
     waivers = waivers or {}
@@ -140,6 +142,7 @@ def build_case_detail(case: Case, result: CaseCheckResult, adapter: Availability
     for item in result.items:
         shown, precision = _partial(item.target_date, offset)
         waiver = waivers.get(item.id)
+        confirmed = (acks or {}).get(confirm_key(item.id))
         items.append(RequiredItemView(
             id=item.id, reasons=item.reasons, modality=item.modality, regions=item.regions,
             target_date=shown, target_date_precision=precision,
@@ -155,6 +158,9 @@ def build_case_detail(case: Case, result: CaseCheckResult, adapter: Availability
             waiver=WaiverView(reason=waiver.reason, actor=waiver.actor,
                               waived_at=waiver.waived_at.isoformat(timespec="minutes"))
             if waiver is not None else None,
+            confirmation=WaiverView(reason=confirmed.note, actor=confirmed.actor,
+                                    waived_at=confirmed.acked_at.isoformat(timespec="minutes"))
+            if confirmed is not None else None,
         ))
 
     planned = result.planned_exam
@@ -169,7 +175,8 @@ def build_case_detail(case: Case, result: CaseCheckResult, adapter: Availability
     patient = PatientView(
         id=case.patient_id,
         display_name=display_name or case.display_name or fictional_name(case.patient_id, tl.sex),
-        sex=tl.sex or "neznámé", age_band=age_band(tl.birth_year),
+        sex=tl.sex or "neznámé", age_band=age_band(tl.birth_year), birth_year=tl.birth_year,
+        birth_band=tl.birth_band,
         diagnoses=[Diagnosis(code=c, text=_ICD_TEXT.get(c[:3], f"Diagnóza {c}")) for c in tl.diagnoses],
     )
     meeting = case.meeting

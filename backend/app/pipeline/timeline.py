@@ -210,4 +210,6 @@ def build_timeline(store: FhirStore, patient_id: str) -> Timeline:
         treatment=build_treatment(store, patient_id, note_docs),
         diagnoses=diagnoses, sex=patient.get("gender"),
         birth_year=int(birth) if birth.isdigit() else None,
+        birth_band=next((x.get("valueString") for x in patient.get("extension", [])
+                         if str(x.get("url", "")).endswith("/rok-narozeni-pasmo")), None),
     )

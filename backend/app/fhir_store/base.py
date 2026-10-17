@@ -10,6 +10,14 @@ from typing import Any
 
 Resource = dict[str, Any]
 
+# Test radiology reports uploaded from the patient view are tagged with this (system, code).
+TEST_UPLOAD_TAG = ("urn:pacs-comparator:simulation", "test-upload")
+
+
+def is_test_upload(resource: Resource) -> bool:
+    tags = (resource.get("meta") or {}).get("tag") or []
+    return any((t.get("system"), t.get("code")) == TEST_UPLOAD_TAG for t in tags)
+
 
 class FhirStoreError(RuntimeError):
     pass
@@ -43,6 +51,14 @@ class FhirStore(ABC):
     @abstractmethod
     def search(self, resource_type: str, params: dict[str, str] | None = None) -> list[Resource]:
         """Search derived resources; only exact-match parameters are required."""
+
+    def delete(self, resource_type: str, resource_id: str) -> None:
+        """Remove a resource we wrote (test uploads only)."""
+        raise FhirStoreError(f"{type(self).__name__} cannot delete resources")
+
+    def forget(self, patient_id: str) -> None:
+        """Drop cached data of a patient after we wrote clinical resources for them."""
+        return None
 
     def imaging_studies(self, patient_id: str) -> list[Resource]:
         return self.resources(patient_id, "ImagingStudy")

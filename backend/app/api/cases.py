@@ -6,6 +6,7 @@ from datetime import date
 from functools import lru_cache
 
 from fastapi import APIRouter, BackgroundTasks, Depends
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.case_views import build_case_detail
@@ -15,14 +16,21 @@ from app.app_db.models import Case
 from app.app_db.repositories import create_case
 from app.app_db.session import get_db as _db_dependency
 from app.config import today
-from app.fhir_store.base import FhirStore, FhirStoreError, PatientNotFound
+from app.fhir_store.base import FhirStore, FhirStoreError, PatientNotFound, Resource, is_test_upload
 from app.fhir_store.factory import get_store
 from app.llm.client import GatewayBackend, StructuredLlm
 from app.pipeline.normalize import clean_regions, normalize_modality
 from app.pipeline.run import run_case_check
 from app.pipeline.schemas import CaseCheckResult, Timeline
-from app.pipeline.timeline import decode_attachment, report_text, to_date
-from app.requests.overlay import optional_client, refresh_case, waivers_for
+from app.pipeline.test_upload import (
+    UPLOAD_MODALITIES,
+    build_resources,
+    default_report_date,
+    shift_text_dates,
+    template_text,
+)
+from app.pipeline.timeline import build_studies, decode_attachment, report_text, to_date
+from app.requests.overlay import acks_for, optional_client, refresh_case, waivers_for
 from app.requests.production_client import ProductionClient
 from app.scheduling.anchoring import shift_iso, unshift_date
 from app.scheduling.eligibility import validate_registration
@@ -85,7 +93,8 @@ def get_case(case_id: str, db: Session = Depends(_db_dependency),
     overlaid, requests = refresh_case(db, case, client)
     db.commit()
     result = overlaid or _empty_result(case)
-    detail = build_case_detail(case, result, requests=requests, waivers=waivers_for(db, case.id))
+    detail = build_case_detail(case, result, requests=requests, waivers=waivers_for(db, case.id),
+                               acks=acks_for(db, case.id))
     detail.requests_available = client is not None and requests is not None
     return detail
 
@@ -159,3 +168,86 @@ def get_document(case_id: str, doc_id: str, db: Session = Depends(_db_dependency
 def _document_view(case: Case, doc_id: str, kind: str, when: date | None, text: str) -> SourceDocumentView:
     shown = shift_iso(when, case.date_offset_days) if when else ""
     return SourceDocumentView(doc_id=doc_id, kind=kind, date=shown, text=text)
+
+
+class TestReportUpload(BaseModel):
+    text: str = Field(min_length=20, max_length=6000)
+    date: str
+    modality: str
+
+
+def _case_studies(store: FhirStore, case: Case) -> list:
+    try:
+        return build_studies(store, case.patient_id)[0]
+    except PatientNotFound as exc:
+        raise NotFoundError("Záznamy pacienta nebyly nalezeny") from exc
+    except FhirStoreError as exc:
+        raise DependencyUnavailable("Záznamy pacienta se nepodařilo načíst") from exc
+
+
+def _uploaded(store: FhirStore, patient_id: str) -> list[Resource]:
+    return [r for rtype in ("ImagingStudy", "DiagnosticReport")
+            for r in store.resources(patient_id, rtype) if is_test_upload(r)]
+
+
+@router.get("/{case_id}/test-reports/template")
+def test_report_template(case_id: str, db: Session = Depends(_db_dependency),
+                         store: FhirStore = Depends(get_fhir_store)) -> dict:
+    """A synthetic report to upload (dates in the UI frame), plus how many test uploads exist."""
+    case = _load_case(db, case_id)
+    studies = _case_studies(store, case)
+    stored = CaseCheckResult.model_validate(case.result.result) if case.result else None
+    planned = stored.planned_exam if stored else None
+    offset = case.date_offset_days
+    day = default_report_date(studies, case.reference_date, unshift_date(today(), offset))
+    text, modality = template_text(studies, planned, day, offset)
+    uploaded = sum(r["resourceType"] == "DiagnosticReport" for r in _uploaded(store, case.patient_id))
+    return {"text": text, "date": shift_iso(day, offset), "modality": modality,
+            "modalities": list(UPLOAD_MODALITIES), "uploaded": uploaded, "simulated": True}
+
+
+@router.post("/{case_id}/test-reports", status_code=201)
+def upload_test_report(case_id: str, body: TestReportUpload, tasks: BackgroundTasks,
+                       db: Session = Depends(_db_dependency), store: FhirStore = Depends(get_fhir_store),
+                       llm: StructuredLlm = Depends(get_llm)) -> dict:
+    """Store a test radiology report in FHIR (simulation tag) and run the case check on it."""
+    case = _load_case(db, case_id)
+    modality = normalize_modality(body.modality)
+    if modality not in UPLOAD_MODALITIES:
+        raise ValidationFailed("Neznámá modalita vyšetření")
+    try:
+        shown = date.fromisoformat(body.date)
+    except ValueError as exc:
+        raise ValidationFailed("Neplatné datum") from exc
+    offset = case.date_offset_days
+    report_date = unshift_date(shown, offset)
+    text = shift_text_dates(body.text.strip(), -offset)
+    try:
+        written = [store.create(r) for r in build_resources(case.patient_id, text, report_date, modality)]
+    except FhirStoreError as exc:
+        raise DependencyUnavailable("Nález se nepodařilo uložit do FHIR") from exc
+    store.forget(case.patient_id)
+    case.check_status = "running"
+    db.commit()
+    tasks.add_task(_background_check, case.id, store, llm)
+    return {"study_id": written[0]["id"], "report_id": written[1]["id"], "check_status": "running",
+            "simulated": True}
+
+
+@router.delete("/{case_id}/test-reports")
+def delete_test_reports(case_id: str, tasks: BackgroundTasks, db: Session = Depends(_db_dependency),
+                        store: FhirStore = Depends(get_fhir_store), llm: StructuredLlm = Depends(get_llm)) -> dict:
+    """Remove the patient's test uploads again and recheck."""
+    case = _load_case(db, case_id)
+    store.forget(case.patient_id)
+    found = _uploaded(store, case.patient_id)
+    try:
+        for res in found:
+            store.delete(res["resourceType"], res["id"])
+    except FhirStoreError as exc:
+        raise DependencyUnavailable("Testovací nálezy se nepodařilo odstranit") from exc
+    store.forget(case.patient_id)
+    case.check_status = "running"
+    db.commit()
+    tasks.add_task(_background_check, case.id, store, llm)
+    return {"deleted": len(found), "check_status": "running"}

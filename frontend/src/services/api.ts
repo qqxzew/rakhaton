@@ -72,6 +72,31 @@ export const api = {
 
 export const isMockMode = USE_MOCK;
 
+export interface TestReportTemplate {
+  text: string;
+  date: string;
+  modality: string;
+  modalities: string[];
+  uploaded: number;
+  simulated: boolean;
+}
+
+export interface TestReportUpload {
+  text: string;
+  date: string;
+  modality: string;
+}
+
+/** Test radiology reports for the live pipeline demo (stored in FHIR with a simulation tag). */
+export const testReportApi = {
+  template: (caseId: string): Promise<TestReportTemplate> =>
+    request(`/cases/${enc(caseId)}/test-reports/template`),
+  upload: (caseId: string, body: TestReportUpload): Promise<{ report_id: string }> =>
+    request(`/cases/${enc(caseId)}/test-reports`, { method: "POST", body: JSON.stringify(body) }),
+  removeAll: (caseId: string): Promise<{ deleted: number }> =>
+    request(`/cases/${enc(caseId)}/test-reports`, { method: "DELETE" }),
+};
+
 // Schedule and registration always call the backend; the mock mode only covers the case detail.
 export const scheduleApi = {
   dashboard: (): Promise<Dashboard> => request("/dashboard?days=7"),

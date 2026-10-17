@@ -62,6 +62,8 @@ export interface Patient {
   sex: string;
   age_band: string;
   diagnoses: Diagnosis[];
+  birth_year?: number | null; // the dataset keeps the year only (k-anonymized)
+  birth_band?: string | null; // or only a range such as "1940-1944"
 }
 
 export interface PlannedExam {
@@ -104,6 +106,8 @@ export interface RequestRef {
   updated_at: string;
   provider_name?: string | null;
   approved_by?: string | null;
+  approved_at?: string | null; // the request is sent right after approval
+  attempts?: number;
 }
 
 export interface Waiver {
@@ -128,6 +132,8 @@ export interface RequiredItem {
   evidence: Evidence | null;
   request: RequestRef | null;
   waiver?: Waiver | null;
+  // coordinator confirmed a delivered, automatically verified study ("reason" is the optional note)
+  confirmation?: Waiver | null;
   simulated: boolean;
   note?: string | null;
 }
