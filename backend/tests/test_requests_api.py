@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import requests as api
-from app.app_db.models import Case, CaseResult, Meeting
+from app.app_db.models import AutopilotPolicy, Case, CaseResult, Meeting
 from app.app_db.session import session_scope
 from app.main import create_app
 from app.requests.production_client import ProductionError, sync_files, visual_trace_url
@@ -47,13 +47,26 @@ class FakeProduction:
         if request_id not in self.requests:
             return None
         v = self.requests[request_id]
-        return {"requestId": request_id, "state": v["state"], "sessionIds": "7,9", "messages": [], "provider": {},
+        return {"requestId": request_id, "state": v["state"], "sessionIds": "7,9", "messages": [], "provider": {"id": v["payload"].get("providerId", "")},
                 "caseId": v["payload"]["caseId"], "itemId": v["payload"]["itemId"],
                 "modality": v["payload"]["modality"], "targetDate": v["payload"]["targetDate"],
                 "regions": v["payload"]["regions"]}
 
     def advance_time(self, hours):
         return {"offsetSeconds": hours * 3600}
+
+
+@pytest.fixture(autouse=True)
+def _reset_autopilot():
+    def clear():
+        with session_scope() as db:
+            policy = db.get(AutopilotPolicy, 1)
+            if policy is not None:
+                db.delete(policy)
+
+    clear()
+    yield
+    clear()
 
 
 @pytest.fixture
@@ -65,11 +78,11 @@ def client_and_fake():
         yield client, fake
 
 
-def _seed_case() -> str:
+def _seed_case(site_id: str = "nnh", site_name: str = "NNH") -> str:
     item = {
         "id": "ITEM-TEST-1", "rule_ids": ["R1"], "reasons": ["test"], "modality": "PET", "regions": ["chest"],
         "target_date": {"year": 2025, "month": 5, "day": 12}, "availability": "not_found", "state": "missing",
-        "holding_site_id": "nnh", "holding_site_name": "NNH",
+        "holding_site_id": site_id, "holding_site_name": site_name,
     }
     result = {"patient_id": "PAC-TEST-0001", "timeline": {"patient_id": "PAC-TEST-0001"}, "items": [item]}
     with session_scope() as db:
@@ -267,3 +280,62 @@ def test_acknowledged_issue_no_longer_blocks_readiness(client_and_fake):
     detail = client.get(f"/api/cases/{case_id}").json()
     assert detail["open_issues"][0]["acknowledged"] is True and detail["open_issues"][0]["key"] == key
     assert client.post(f"/api/cases/CASE-NOPE/issues/{key}/acknowledge", json={"coordinator": "K"}).status_code == 404
+
+
+def test_autopilot_needs_a_name_to_be_enabled(client_and_fake):
+    client, fake = client_and_fake
+    assert client.get("/api/autopilot").json()["enabled"] is False
+    assert client.put("/api/autopilot", json={"enabled": True, "coordinator": " "}).status_code == 422
+    assert client.get("/api/autopilot").json()["enabled"] is False
+    out = client.put("/api/autopilot", json={"enabled": True, "coordinator": "Koordinátor"}).json()
+    assert out["enabled"] is True and out["actor"] == "Koordinátor" and out["changed_at"]
+    off = client.put("/api/autopilot", json={"enabled": False}).json()
+    assert off["enabled"] is False and off["actor"] == "Koordinátor"
+    assert fake.calls == []
+
+
+def test_drafts_stay_drafted_while_autopilot_is_off(client_and_fake):
+    client, fake = client_and_fake
+    out = client.post(f"/api/cases/{_seed_case()}/requests").json()
+    assert out[0]["auto_approved"] is False
+    assert [c[0] for c in fake.calls] == ["DRAFT"]
+
+
+def test_autopilot_approves_new_drafts_with_known_site(client_and_fake):
+    client, fake = client_and_fake
+    client.put("/api/autopilot", json={"enabled": True, "coordinator": "Koordinátor"})
+    out = client.post(f"/api/cases/{_seed_case()}/requests").json()
+    assert out[0]["auto_approved"] is True
+    action, _, payload, actor = fake.calls[-1]
+    assert action == "APPROVE" and actor == "autopilot (zapnul Koordinátor)"
+    assert payload == {"approvedBy": actor}
+    assert [r["state"] for r in fake.requests.values()] == ["SENT"]
+
+
+def test_autopilot_leaves_unknown_site_for_a_human(client_and_fake):
+    client, fake = client_and_fake
+    client.put("/api/autopilot", json={"enabled": True, "coordinator": "Koordinátor"})
+    out = client.post(f"/api/cases/{_seed_case('unknown', 'Neznámé pracoviště')}/requests").json()
+    assert out[0]["auto_approved"] is False
+    assert [c[0] for c in fake.calls] == ["DRAFT"]
+    assert [r["state"] for r in fake.requests.values()] == ["DRAFTED"]
+
+
+def test_nightly_run_reports_auto_approved(client_and_fake, monkeypatch):
+    client, fake = client_and_fake
+    _seed_case()
+    monkeypatch.setattr(api, "run_case_check", lambda *a, **k: object())
+    client.put("/api/autopilot", json={"enabled": True, "coordinator": "Koordinátor"})
+    out = client.post("/api/demo/nightly-run", json={"days": 3}).json()
+    assert out["autopilot"] is True and out["auto_approved"] == 1
+    assert out["drafts_created"] == 1 and out["drafts_pending"] == 0
+    assert out["meetings"][0]["auto_approved"] == 1
+    assert [c[0] for c in fake.calls] == ["DRAFT", "APPROVE"]
+
+
+def test_enabling_autopilot_approves_waiting_drafts(client_and_fake):
+    client, fake = client_and_fake
+    client.post(f"/api/cases/{_seed_case()}/requests")
+    out = client.put("/api/autopilot", json={"enabled": True, "coordinator": "Koordinátor"}).json()
+    assert out["auto_approved"] == 1
+    assert [r["state"] for r in fake.requests.values()] == ["SENT"]

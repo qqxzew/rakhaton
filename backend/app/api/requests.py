@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.api import cache as api_cache
 from app.api.cases import get_fhir_store, get_llm
 from app.api.errors import DependencyUnavailable, NotFoundError, ValidationFailed
-from app.app_db.models import Case, CaseResult, IssueAck, ItemWaiver, Meeting, utcnow
+from app.app_db.models import AutopilotPolicy, Case, CaseResult, IssueAck, ItemWaiver, Meeting, utcnow
 from app.app_db.session import get_db as _db_dependency
 from app.config import today
 from app.exchange.hospitals import HospitalError, make_client, provider, request
@@ -78,6 +78,11 @@ class AckBody(BaseModel):
 
 class NightlyBody(BaseModel):
     days: int = Field(default=2, ge=0, le=14)
+
+
+class AutopilotBody(BaseModel):
+    enabled: bool
+    coordinator: str = Field(default="", max_length=100)
 
 
 def _guard(call):
@@ -150,11 +155,83 @@ def draft_missing(db: Session, case: Case, client: ProductionClient) -> list[dic
     return out
 
 
+# --- autopilot: a standing approval policy ----------------------------------------------------------
+
+
+def _autopilot_view(policy: AutopilotPolicy | None) -> dict:
+    if policy is None or not policy.enabled:
+        return {"enabled": False, "actor": policy.actor if policy else "",
+                "changed_at": policy.changed_at.isoformat(timespec="seconds") if policy else None}
+    return {"enabled": True, "actor": policy.actor, "changed_at": policy.changed_at.isoformat(timespec="seconds")}
+
+
+def autopilot_actor(db: Session) -> str | None:
+    """Actor string for automatic approvals, or None while autopilot is off."""
+    policy = db.get(AutopilotPolicy, 1)
+    if policy is None or not policy.enabled:
+        return None
+    return f"autopilot (zapnul {policy.actor})"
+
+
+def auto_approve(db: Session, client: ProductionClient, request_ids: list[str]) -> list[str]:
+    """Approve DRAFTED requests under the autopilot policy, through the same production call as a click.
+    Requests whose holding site is unknown stay drafted for a human. Returns the approved request ids."""
+    actor = autopilot_actor(db)
+    if actor is None:
+        return []
+    approved = []
+    for request_id in request_ids:
+        data = _guard(lambda r=request_id: client.get(r)) or {}
+        if data.get("state") != "DRAFTED":
+            continue
+        site = (data.get("provider") or {}).get("id") or ""
+        if site in ("", "unknown") or provider(site) is None:
+            continue
+        _guard(lambda r=request_id: client.submit("APPROVE", r, {"approvedBy": actor}, actor))
+        approved.append(request_id)
+    return approved
+
+
+@router.get("/autopilot")
+def get_autopilot(db: Session = Depends(_db_dependency)) -> dict:
+    return _autopilot_view(db.get(AutopilotPolicy, 1))
+
+
+@router.put("/autopilot")
+def set_autopilot(body: AutopilotBody, db: Session = Depends(_db_dependency),
+                  client: ProductionClient = Depends(production)) -> dict:
+    """Switch the autopilot on or off. Enabling needs the coordinator's name (it is the approval record)
+    and approves the drafts that already wait for a known hospital."""
+    name = body.coordinator.strip()
+    if body.enabled and len(name) < 2:
+        raise ValidationFailed("Pro zapnutí autopilota zadejte jméno koordinátora")
+    policy = db.get(AutopilotPolicy, 1)
+    if policy is None:
+        policy = AutopilotPolicy(id=1)
+        db.add(policy)
+    policy.enabled = body.enabled
+    policy.actor = name or policy.actor
+    policy.changed_at = utcnow()
+    db.commit()
+    approved: list[str] = []
+    if body.enabled:
+        approved = auto_approve(db, client, _guard(lambda: client.draft_ids([])))
+        if approved:
+            rows = _guard(lambda: client.list(""))
+            _refresh(db, client, {r.get("caseId", "") for r in rows if r.get("requestId") in approved})
+    api_cache.invalidate()
+    return {**_autopilot_view(policy), "auto_approved": len(approved)}
+
+
 @router.post("/cases/{case_id}/requests")
 def create_drafts(case_id: str, db: Session = Depends(_db_dependency),
                   client: ProductionClient = Depends(production)) -> list[dict]:
     case, _ = _case_result(db, case_id)
     out = draft_missing(db, case, client)
+    new = [d.get("requestId", "") for d in out if "existuje" not in str(d.get("note", ""))]
+    approved = set(auto_approve(db, client, [r for r in new if r]))
+    for d in out:
+        d["auto_approved"] = d.get("requestId") in approved
     _refresh(db, client, {case_id})
     return out
 
@@ -386,10 +463,12 @@ def nightly_run(body: NightlyBody | None = None, db: Session = Depends(_db_depen
     days = (body or NightlyBody()).days
     cases = _window_cases(db, days)
     case_ids = [c.id for c in cases]
+    autopilot_on = autopilot_actor(db) is not None
     db.close()
     per_meeting: dict[str, dict] = {}
     failed = 0
     created_total = 0
+    auto_total = 0
     from app.app_db.session import session_scope
 
     for case_id in case_ids:
@@ -400,17 +479,30 @@ def nightly_run(body: NightlyBody | None = None, db: Session = Depends(_db_depen
             created = draft_missing(s, case, client)
             new = [d for d in created if "existuje" not in str(d.get("note", ""))]
             created_total += len(new)
+            auto = auto_approve(s, client, [d.get("requestId", "") for d in new if d.get("requestId")])
+            auto_total += len(auto)
             refresh_case(s, case, client)
             m = case.meeting
             entry = per_meeting.setdefault(m.id, {"meeting_id": m.id, "label": m.label, "date": m.date.isoformat(),
-                                                  "time": m.time, "cases": 0, "drafts_created": 0})
+                                                  "time": m.time, "cases": 0, "drafts_created": 0, "auto_approved": 0})
             entry["cases"] += 1
             entry["drafts_created"] += len(new)
+            entry["auto_approved"] += len(auto)
     api_cache.invalidate()
     pending = _guard(lambda: client.draft_ids(case_ids)) if case_ids else []
+    # Drafts left from earlier runs (for example created before autopilot was switched on).
+    with session_scope() as s:
+        swept = auto_approve(s, client, pending)
+        if swept:
+            auto_total += len(swept)
+            rows = _guard(lambda: client.list(""))
+            _refresh(s, client, {r.get("caseId", "") for r in rows if r.get("requestId") in set(swept)})
+    pending = [r for r in pending if r not in set(swept)]
+    api_cache.invalidate()
     return {"window": {"from": today().isoformat(), "to": (today() + timedelta(days=days)).isoformat()},
             "cases_checked": len(case_ids), "failed": failed, "drafts_created": created_total,
-            "drafts_pending": len(pending), "meetings": list(per_meeting.values()), "simulated": True}
+            "drafts_pending": len(pending), "auto_approved": auto_total, "autopilot": autopilot_on,
+            "meetings": list(per_meeting.values()), "simulated": True}
 
 
 @router.get("/demo/summary")

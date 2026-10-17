@@ -89,7 +89,16 @@ export interface NightlyResult {
   failed: number;
   drafts_created: number;
   drafts_pending: number;
+  auto_approved?: number;
+  autopilot?: boolean;
   meetings: { meeting_id: string; label: string; date: string; time: string; cases: number; drafts_created: number }[];
+}
+
+export interface AutopilotState {
+  enabled: boolean;
+  actor: string;
+  changed_at: string | null;
+  auto_approved?: number;
 }
 
 export interface DemoSummary {
@@ -144,6 +153,9 @@ export const requestsApi = {
     post<{ readiness: string; readiness_reason: string }>(
       `/cases/${enc(caseId)}/items/${enc(itemId)}/confirm`, { coordinator }),
   nightly: () => post<NightlyResult>("/demo/nightly-run", { days: 2 }),
+  autopilot: () => call<AutopilotState>("/autopilot"),
+  setAutopilot: (enabled: boolean, coordinator: string) =>
+    call<AutopilotState>("/autopilot", { method: "PUT", body: JSON.stringify({ enabled, coordinator }) }),
   summary: () => call<DemoSummary>("/demo/summary?days=7"),
   advance: (hours: number) => post<{ offsetSeconds?: number; now?: string; ticked?: unknown[] }>("/demo/advance-time", { hours }),
   chat: (caseId: string, question: string) => post<ChatResult>("/agent/chat", { case_id: caseId, question }),
@@ -174,6 +186,10 @@ export function useRequestDetail(id: string | null) {
 
 export function useDemoSummary() {
   return useQuery({ queryKey: ["demo-summary"], queryFn: requestsApi.summary, refetchInterval: 15_000 });
+}
+
+export function useAutopilot() {
+  return useQuery({ queryKey: ["demo-summary", "autopilot"], queryFn: requestsApi.autopilot, refetchInterval: 15_000 });
 }
 
 export function useEvaluation() {

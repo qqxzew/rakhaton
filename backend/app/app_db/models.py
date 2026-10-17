@@ -137,3 +137,15 @@ class ItemWaiver(Base):
     reason: Mapped[str] = mapped_column(String(400))
     actor: Mapped[str] = mapped_column(String(100))
     waived_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class AutopilotPolicy(Base):
+    """Standing approval policy (one row, id 1): while enabled, drafted requests with a known holding site
+    are approved without a click. Who switched it on and when is the approval record (spec rule 3)."""
+
+    __tablename__ = "autopilot_policy"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    actor: Mapped[str] = mapped_column(String(100), default="")
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
