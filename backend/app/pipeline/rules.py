@@ -11,6 +11,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from app.config import CONFIG_DIR
+from app.pipeline.checklist import modality_label, plan_checklist
 from app.pipeline.normalize import add_relative, regions_overlap
 from app.pipeline.schemas import PartialDate, PlannedExam, PriorReference, Study, Timeline
 
@@ -183,6 +184,15 @@ def compute_required(
             before = latest([s for s in studies if s.date <= last_mdt and _overlaps(s.regions, wanted, True)])
             if before:
                 out.add_study(before[0], "R5", reasons["R5"])
+
+    chk_cfg = rules.get("CHK", {})
+    if chk_cfg and enabled("CHK"):
+        for pick in plan_checklist(timeline, references, planned, reference_date, chk_cfg).picks:
+            reason = reasons["CHK"].format(modality=modality_label(pick.modality))
+            if pick.study is not None:
+                out.add_study(pick.study, "CHK", reason)
+            else:
+                out.add_reference(pick.reference, "CHK", reason)  # type: ignore[arg-type]
 
     return sorted(out.items.values(), key=lambda c: (c.target_date.as_date() if c.target_date else date.min,
                                                       c.key), reverse=True)
