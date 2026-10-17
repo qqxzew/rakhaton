@@ -662,6 +662,7 @@ Real PACS/ePACS/DICOM connections, real telephony, real email to real hospitals,
 - Dashboard banner: nightly run (`POST /api/demo/nightly-run`), summary (`GET /api/demo/summary`), approve all for the window (`case_ids`), advance time +24 h. Page `/statistiky`.
 - Readiness overlay (`app/requests/overlay.py`): the stored check result plus coordinator waivers (table `ItemWaiver`) plus request states from the production; recomputed after every action. Overview endpoints use a short server-side TTL cache, cleared after every action.
 - The planned exam can come from a simulated RIS ORM (`app/pipeline/planned_ris.py`), labeled "RIS (simulace)".
+- IRIS Community resource budget (per backend process): app SQL uses at most 4 connections, no overflow, 3-second pool wait; SQL readers share it without needing `IRIS_SQL_POOL`. Native calls share one serialized connection per namespace; FHIR consumers share one keep-alive client and CSP cookie jar per base. Startup waits for SQL/native warm-up, shutdown releases resources. Use one backend worker with the Community license. Case-detail GET only reads stored results and request states; discovery/LLM work belongs to recheck.
 
 Deviations from this spec:
 - A RIS order is preferred over the text plan and its date is shifted into the patient's date frame.

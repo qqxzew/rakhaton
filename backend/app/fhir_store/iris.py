@@ -21,6 +21,7 @@ import httpx
 
 from app.config import Settings, get_settings
 from app.fhir_store.base import FhirStore, FhirStoreError, PatientNotFound, Resource
+from app.iris_resources import fhir_client
 
 # Clinical resource types the pipeline reads per patient (lab Observations are not loaded).
 PATIENT_TYPES = (
@@ -46,11 +47,7 @@ class IrisFhirStore(FhirStore):
         self.base = s.iris_fhir_base.rstrip("/")
         if not self.base:
             raise FhirStoreError("IRIS_FHIR_BASE is not set")
-        self._client = client or httpx.Client(
-            auth=(s.iris_user or "SuperUser", s.iris_password or "SYS"),
-            timeout=60,
-            headers={"Accept": "application/fhir+json"},
-        )
+        self._client = client or fhir_client(self.base, s)
         self._bundles: OrderedDict[str, Resource] = OrderedDict()
 
     # --- HTTP helpers -----------------------------------------------------------------------

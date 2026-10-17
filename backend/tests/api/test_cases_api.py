@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -79,6 +80,45 @@ def test_case_detail_view_model_after_check(client):
     referenced = next(e for e in body["timeline"] if e["kind"] == "referenced")
     assert referenced["date"] == date.fromordinal(date(2025, 5, 12).toordinal() + offset).isoformat()
     assert "text" not in str(body["timeline"][0])
+
+
+@pytest.mark.parametrize("backend", ["local", "iris"])
+def test_repeated_case_reads_only_use_stored_results_and_reuse_native_connection(client, monkeypatch, backend):
+    import iris
+
+    from app import iris_resources
+    from app.pipeline import checklist
+    from app.requests.production_client import get_client
+
+    run_case_check("CASE-1", client.store, client.llm)
+    monkeypatch.setenv("FHIR_BACKEND", backend)
+    get_settings.cache_clear()
+    iris_resources.close_resources()
+    get_client.cache_clear()
+    native = Mock()
+    native.classMethodValue.return_value = "[]"
+    connect = Mock()
+    monkeypatch.setattr(iris, "createConnection", connect)
+    monkeypatch.setattr(iris, "createIRIS", Mock(return_value=native))
+    http_factory = Mock(side_effect=AssertionError("GET must not create a FHIR client"))
+    monkeypatch.setattr(iris_resources, "_FhirClient", http_factory)
+    forbidden = Mock(side_effect=AssertionError("GET must not run the pipeline or discovery"))
+    monkeypatch.setattr(cases_api, "run_case_check", forbidden)
+    monkeypatch.setattr(checklist, "fhir_finder", forbidden)
+    monkeypatch.setattr(client.store, "get_patient_bundle", forbidden)
+    monkeypatch.setattr(client.llm, "run", forbidden)
+    try:
+        for _ in range(20):
+            response = client.get("/api/cases/CASE-1")
+            assert response.status_code == 200
+            assert response.json()["check_status"] == "done"
+            assert response.json()["items"]
+        assert connect.call_count == (1 if backend == "iris" else 0)
+        http_factory.assert_not_called()
+        forbidden.assert_not_called()
+    finally:
+        iris_resources.close_resources()
+        get_client.cache_clear()
 
 
 def test_source_document_endpoint_returns_text_and_rejects_foreign_ids(client):

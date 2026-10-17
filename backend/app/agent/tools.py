@@ -15,7 +15,6 @@ from typing import Any
 import httpx
 from sqlalchemy import text
 
-from app.config import get_settings
 from app.logging import get_logger
 
 log = get_logger(__name__)
@@ -51,9 +50,9 @@ def _fhir_base(endpoint: str) -> str:
 
 
 def _fhir_client() -> httpx.Client:
-    s = get_settings()
-    return httpx.Client(auth=(s.iris_user or "SuperUser", s.iris_password or "SYS"), timeout=30,
-                        headers={"Accept": "application/fhir+json"})
+    from app.exchange.hospitals import make_client
+
+    return make_client()
 
 
 def _brief(resource: dict[str, Any]) -> dict[str, Any]:
@@ -75,8 +74,9 @@ def fhir_search(resource_type: str, params: dict[str, str] | None = None, endpoi
         query[str(key)] = str(value)
     query["_count"] = str(min(int(query.get("_count", MAX_FHIR_ENTRIES)), MAX_FHIR_ENTRIES))
     base = _fhir_base(endpoint)
-    with _fhir_client() as client:
-        resp = client.get(f"{base}/{resource_type}", params=query)
+    from app.exchange.hospitals import make_client
+
+    resp = make_client(base=base).get(f"{base}/{resource_type}", params=query)
     if resp.status_code >= 300:
         raise ToolError(f"FHIR search failed: HTTP {resp.status_code}")
     bundle = resp.json()
@@ -241,8 +241,7 @@ def create_task_draft(patient_id: str, description: str, modality: str = "", bod
                    ("case_id", case_id)) if v],
     }
     base = _fhir_base("motol")
-    with _fhir_client() as client:
-        resp = client.put(f"{base}/Task/{task_id}", json=task, headers={"Content-Type": "application/fhir+json"})
+    resp = _fhir_client().put(f"{base}/Task/{task_id}", json=task, headers={"Content-Type": "application/fhir+json"})
     if resp.status_code >= 300:
         raise ToolError(f"Task draft was not created: HTTP {resp.status_code}")
     return {"task_id": task_id, "status": "draft", "sent": False,

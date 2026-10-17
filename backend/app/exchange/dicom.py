@@ -113,15 +113,13 @@ class IrisCFindClient(CFindClient):
         settings = get_settings()
         self._args = (host, port or int(cfg.get("iris_port", 1972)), cfg.get("iris_namespace", "PACSDICOM"),
                       user or settings.iris_user or "SuperUser", password or settings.iris_password or "SYS")
-        self._conn: Any = None
         self._irispy: Any = None
 
     def _api(self) -> Any:
         if self._irispy is None:
-            import iris
+            from app.iris_resources import native_session
 
-            self._conn = iris.createConnection(*self._args)
-            self._irispy = iris.createIRIS(self._conn)
+            self._irispy = native_session(*self._args)
         return self._irispy
 
     def find(self, ae: str, patient_id: str, window: tuple[date, date] | None, modality: str | None

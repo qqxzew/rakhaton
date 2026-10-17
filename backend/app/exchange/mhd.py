@@ -151,7 +151,7 @@ def provide_document_bundle(
 ) -> dict[str, Any]:
     """Build the ITI-65 bundle and POST it to Motol's FHIR endpoint. Returns the transaction response."""
     bundle = build_provide_document_bundle(provider, req)
-    client = client or make_client()
+    client = client or make_client(base=base)
     resp = request(client, "POST", (base or motol_base()).rstrip("/"), json=bundle,
                    headers={"Content-Type": FHIR_JSON})
     if resp.status_code >= 300:
@@ -169,8 +169,9 @@ def find_delivery(
     request_id: str, client: httpx.Client | None = None, base: str | None = None
 ) -> Delivery | None:
     """Search Motol for DocumentReference / SubmissionSet List carrying the request id; resolve the study."""
-    client = client or make_client()
+    supplied_client = client
     base = (base or motol_base()).rstrip("/")
+    client = client or make_client(base=base)
     documents = _by_request(client, base, "DocumentReference", request_id)
     if not documents:
         return None
@@ -183,7 +184,7 @@ def find_delivery(
     hospital = next((h for h in hospitals() if related.startswith(h.base_url + "/")), None)
     modality = study_date = None
     if hospital is not None:  # only dereference references that point at a known simulated hospital
-        resp = request(client, "GET", related)
+        resp = request(supplied_client or make_client(base=hospital.base_url), "GET", related)
         if resp.status_code < 300:
             study = resp.json()
             for coding in study.get("modality", []):

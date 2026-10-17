@@ -11,9 +11,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-import iris
-
 from app.config import get_settings
+from app.iris_resources import native_session
 
 NAMESPACE = "FHIRSERVER"
 INTAKE = "PacsComparator.BS.RequestIntake"
@@ -40,7 +39,7 @@ class ProductionClient:
     def _api(self) -> Any:
         if self._irispy is None:
             try:
-                self._irispy = iris.createIRIS(iris.createConnection(*self._args))
+                self._irispy = native_session(*self._args)
             except Exception as exc:  # connection errors come in several native types
                 raise ProductionError(f"IRIS production unreachable: {exc}") from exc
         return self._irispy

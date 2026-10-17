@@ -89,6 +89,7 @@ def register_case(body: CaseCreate, tasks: BackgroundTasks, db: Session = Depend
 @router.get("/{case_id}", response_model=CaseDetail)
 def get_case(case_id: str, db: Session = Depends(_db_dependency),
              client: ProductionClient | None = Depends(optional_client)) -> CaseDetail:
+    """Read the stored check and request states only; discovery and extraction belong to recheck."""
     case = _load_case(db, case_id)
     overlaid, requests = refresh_case(db, case, client)
     db.commit()

@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 import httpx
 
 from app.config import CONFIG_DIR, Settings, get_settings
+from app.iris_resources import fhir_client
 from app.pipeline.schemas import PartialDate
 
 SIM_SYSTEM = "urn:pacs-comparator:simulation"
@@ -86,10 +87,8 @@ def provider(provider_id: str) -> dict | None:
     return next((p for p in _providers() if p["id"] == provider_id), None)
 
 
-def make_client(settings: Settings | None = None) -> httpx.Client:
-    s = settings or get_settings()
-    return httpx.Client(auth=(s.iris_user or "SuperUser", s.iris_password or "SYS"), timeout=60,
-                        headers={"Accept": FHIR_JSON})
+def make_client(settings: Settings | None = None, base: str | None = None) -> httpx.Client:
+    return fhir_client(base or motol_base(settings), settings)
 
 
 def request(client: httpx.Client, method: str, url: str, retries: int = 3, **kwargs: Any) -> httpx.Response:
@@ -144,7 +143,8 @@ def representative_date(target: PartialDate) -> date:
 
 
 def search_imaging_studies(
-    client: httpx.Client, hospital: Hospital, patient_id: str, modality: str | None, window: tuple[date, date] | None
+    client: httpx.Client | None, hospital: Hospital, patient_id: str, modality: str | None,
+    window: tuple[date, date] | None
 ) -> list[dict]:
     """`ImagingStudy?subject=Patient/<id>&started=ge..&started=le..` (modality filtered client side).
 
@@ -154,7 +154,7 @@ def search_imaging_studies(
     params: list[tuple[str, str]] = [("subject", f"Patient/{patient_id}")]
     if window:
         params += [("started", f"ge{window[0].isoformat()}"), ("started", f"le{window[1].isoformat()}")]
-    found = search_bundle(client, hospital.base_url, "ImagingStudy", params)
+    found = search_bundle(client or make_client(base=hospital.base_url), hospital.base_url, "ImagingStudy", params)
     if not modality or modality in ("UNKNOWN", "OTHER"):
         return found
     return [r for r in found if _study_modality(r) in (modality, None)]

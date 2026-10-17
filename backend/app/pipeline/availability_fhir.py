@@ -22,7 +22,6 @@ from app.exchange.hospitals import (
     HospitalError,
     date_window,
     hospitals,
-    make_client,
     representative_date,
     search_imaging_studies,
 )
@@ -58,7 +57,7 @@ class FhirHospitalAdapter(AvailabilityAdapter):
         if not wanted:
             return items, []
         targets = self._targets if self._targets is not None else hospitals()
-        client = self._client or make_client()
+        client = self._client
         issues: list[OpenIssue] = []
         out: list[RequiredItem] = []
         unreachable: set[str] = set()
@@ -106,7 +105,7 @@ class FhirHospitalAdapter(AvailabilityAdapter):
         return sorted(targets, key=lambda h: h.id != preferred_id)
 
     def _locate(
-        self, client: httpx.Client, targets: list[Hospital], item: RequiredItem, ref: PriorReference,
+        self, client: httpx.Client | None, targets: list[Hospital], item: RequiredItem, ref: PriorReference,
         unreachable: set[str],
     ) -> tuple[Hospital, dict] | None:
         window = date_window(ref.ref_date)

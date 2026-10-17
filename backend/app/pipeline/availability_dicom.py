@@ -20,7 +20,6 @@ from app.exchange.dicom import MOTOL_ID, CFindClient, DicomMatch, PacsNode, defa
 from app.exchange.hospitals import (
     date_window,
     hospitals,
-    make_client,
     provider,
     representative_date,
     search_imaging_studies,
@@ -179,7 +178,7 @@ class DicomAvailabilityAdapter(AvailabilityAdapter):
                 return None
             window = date_window(ref.ref_date)
             wanted = representative_date(ref.ref_date)  # type: ignore[arg-type] - checked by the caller
-            studies = search_imaging_studies(make_client(), hospital, ref.patient_id, ref.modality, window)
+            studies = search_imaging_studies(None, hospital, ref.patient_id, ref.modality, window)
             if not studies:
                 return None
             best = min(studies, key=lambda s: abs(_started(s, wanted) - wanted))

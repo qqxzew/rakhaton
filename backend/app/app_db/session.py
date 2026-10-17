@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.app_db.models import Base
@@ -14,6 +15,7 @@ from app.config import get_settings
 
 _engine: Engine | None = None
 _factory: sessionmaker[Session] | None = None
+IRIS_POOL_SIZE = 4
 
 
 def make_engine(url: str) -> Engine:
@@ -23,6 +25,8 @@ def make_engine(url: str) -> Engine:
         url,
         connect_args={"check_same_thread": False} if url.startswith("sqlite") else {},
         pool_pre_ping=not url.startswith("sqlite"),
+        **({"pool_size": IRIS_POOL_SIZE, "max_overflow": 0, "pool_timeout": 3}
+           if make_url(url).get_backend_name() == "iris" else {}),
     )
     if url.startswith("sqlite"):
         @event.listens_for(engine, "connect")
@@ -36,6 +40,8 @@ def make_engine(url: str) -> Engine:
 def init_db(url: str | None = None) -> Engine:
     """(Re)initialise the global engine and create tables."""
     global _engine, _factory
+    if _engine is not None:
+        _engine.dispose()
     _engine = make_engine(url or get_settings().app_db_url)
     Base.metadata.create_all(_engine)
     _factory = sessionmaker(_engine, expire_on_commit=False)

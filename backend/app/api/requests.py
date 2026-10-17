@@ -331,13 +331,13 @@ def simulate_delivery(request_id: str, body: DeliveryBody, db: Session = Depends
     given = {k: v for k, v in body.model_dump().items() if v}
     if item is not None and item.provider_study_ref:
         hospital = provider(item.holding_site_id or "")
-        http = make_client()
+        http = make_client(base=item.provider_study_ref.rsplit("/ImagingStudy/", 1)[0])
         try:
             study = request(http, "GET", item.provider_study_ref).json()
             study_date = date.fromisoformat(str(study["started"])[:10])
             provide_document_bundle(hospital, DeliveryRequest(
                 request_id=request_id, patient_id=case.patient_id, modality=item.modality, study_date=study_date,
-                provider_study_ref=item.provider_study_ref), client=http)
+                provider_study_ref=item.provider_study_ref))
         except HospitalError as exc:
             raise DependencyUnavailable(f"Doručení se nepodařilo: {exc}") from exc
     if given or item is None or not item.provider_study_ref:

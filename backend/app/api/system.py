@@ -9,14 +9,12 @@ here approves or sends a request (approval stays in /api/requests, hard rule 3).
 from __future__ import annotations
 
 import re
-import threading
 import time
 from collections.abc import Callable, Iterator
 from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -30,6 +28,7 @@ from app.api.search import get_vector_backend
 from app.app_db.models import Case
 from app.app_db.session import get_db
 from app.config import CONFIG_DIR, get_settings, today
+from app.iris_resources import fhir_client, native_session
 from app.logging import get_logger
 from app.requests.production_client import ProductionClient, visual_trace_url
 from app.search.vector_store import VectorBackend
@@ -100,7 +99,7 @@ def _providers() -> list[dict]:
     return json.loads((CONFIG_DIR / "providers.json").read_text(encoding="utf-8"))
 
 
-# --- IRIS access (one lazy connection per HTTP request; tests replace the whole class) -------------
+# --- IRIS access (borrow SQL, share native and HTTP sessions) --------------------------------------
 
 
 class IrisSystem:
@@ -110,25 +109,12 @@ class IrisSystem:
         self._conn: Any = None
         self._cursor: Any = None
         self._native: Any = None
-        self._pooled: Any = None
 
     def _connect(self) -> None:
         if self._conn is None:
-            from app.stats.projection import pooled_connection, sql_pool_enabled
+            from app.stats.projection import sql_connection
 
-            if sql_pool_enabled():
-                self._pooled = pooled_connection()
-                self._conn = self._pooled.dbapi_connection
-                return
-            self._conn = self._new_connection()
-
-    @staticmethod
-    def _new_connection() -> Any:
-        import iris
-
-        s = get_settings()
-        host = urlparse(s.iris_fhir_base).hostname or "localhost"
-        return iris.createConnection(host, 1972, "FHIRSERVER", s.iris_user or "SuperUser", s.iris_password or "SYS")
+            self._conn = sql_connection()
 
     def cursor(self) -> Any:
         self._connect()
@@ -137,14 +123,8 @@ class IrisSystem:
         return self._cursor
 
     def native(self) -> Any:
-        self._connect()
         if self._native is None:
-            import iris
-
-            if self._pooled is not None:  # the pooled SQL connection cannot carry native API calls
-                self._native = shared_native()
-            else:
-                self._native = iris.createIRIS(self._conn)
+            self._native = shared_native()
         return self._native
 
     def rows(self, sql: str, params: list | None = None) -> list[tuple]:
@@ -188,26 +168,19 @@ class IrisSystem:
     def close(self) -> None:
         if self._conn is not None:
             try:
-                (self._pooled or self._conn).close()  # a pooled connection goes back to the pool
-            except Exception:  # noqa: BLE001
-                pass
-            self._conn = self._cursor = self._native = self._pooled = None
-
-
-_native_lock = threading.Lock()
-_native_api: Any = None
+                if self._cursor is not None:
+                    self._cursor.close()
+            finally:
+                self._conn.close()
+                self._conn = self._cursor = None
+        self._native = None
 
 
 def shared_native() -> Any:
-    """One long-lived native API connection per process (IRIS_SQL_POOL=1), like the production client: on the cloud
-    IRIS the first call of every new connection takes about 30 s."""
-    global _native_api
-    with _native_lock:
-        if _native_api is None:
-            import iris
-
-            _native_api = iris.createIRIS(IrisSystem._new_connection())
-        return _native_api
+    """Share the production's serialized FHIRSERVER native session."""
+    s = get_settings()
+    host = urlparse(s.iris_fhir_base).hostname or "localhost"
+    return native_session(host, 1972, "FHIRSERVER", s.iris_user or "SuperUser", s.iris_password or "SYS")
 
 
 def warm_native() -> None:
@@ -228,21 +201,16 @@ def get_iris() -> Iterator[IrisSystem]:
 class FhirReader:
     """`_summary=count` searches and single reads on the Motol and simulated hospital FHIR endpoints."""
 
-    def __init__(self) -> None:
-        s = get_settings()
-        self._client = httpx.Client(auth=(s.iris_user or "SuperUser", s.iris_password or "SYS"), timeout=15,
-                                    headers={"Accept": "application/fhir+json"})
-
     def count(self, base: str, resource_type: str, params: dict[str, str] | None = None) -> int:
-        resp = self._client.get(f"{base}/{resource_type}", params={**(params or {}), "_summary": "count"})
+        resp = fhir_client(base).get(f"{base}/{resource_type}", params={**(params or {}), "_summary": "count"})
         resp.raise_for_status()
         return int(resp.json().get("total") or 0)
 
     def exists(self, base: str, resource_type: str, resource_id: str) -> bool:
-        return self._client.get(f"{base}/{resource_type}/{resource_id}").status_code == 200
+        return fhir_client(base).get(f"{base}/{resource_type}/{resource_id}").status_code == 200
 
     def close(self) -> None:
-        self._client.close()
+        pass  # clients and their CSP cookies belong to the process, not to this reader
 
 
 def get_fhir() -> Iterator[FhirReader]:

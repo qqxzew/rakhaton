@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
-import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -15,8 +15,9 @@ from app.api import requests as requests_api
 from app.api.errors import register_error_handlers
 from app.api.system import warm_native
 from app.app_db.repositories import ensure_meetings
-from app.app_db.session import init_db, session_scope
+from app.app_db.session import get_engine, init_db, session_scope
 from app.config import REPO_ROOT, today
+from app.iris_resources import close_resources
 from app.logging import configure_logging
 from app.stats.projection import sql_pool_enabled, warm_pool
 
@@ -28,9 +29,12 @@ async def lifespan(_: FastAPI):
     with session_scope() as db:
         ensure_meetings(db, today())
     if sql_pool_enabled():
-        threading.Thread(target=warm_pool, daemon=True).start()
-        threading.Thread(target=warm_native, daemon=True).start()
-    yield
+        await asyncio.gather(asyncio.to_thread(warm_pool), asyncio.to_thread(warm_native))
+    try:
+        yield
+    finally:
+        close_resources()
+        get_engine().dispose()
 
 
 def create_app() -> FastAPI:

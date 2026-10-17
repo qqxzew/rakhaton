@@ -112,18 +112,17 @@ FinderFactory = Callable[[], Finder]
 
 
 def fhir_finder() -> Finder:
-    from app.exchange.hospitals import HospitalError, hospitals, make_client, search_imaging_studies
+    from app.exchange.hospitals import HospitalError, hospitals, search_imaging_studies
     from app.pipeline.availability_fhir import LOCATED_BY
 
     targets = hospitals()
-    client = make_client()
 
     def find(patient_id: str, modality: str, window: tuple[date, date]) -> FoundStudy | None:
         best: FoundStudy | None = None
         reachable = 0
         for hospital in targets:
             try:
-                studies = search_imaging_studies(client, hospital, patient_id, modality, window)
+                studies = search_imaging_studies(None, hospital, patient_id, modality, window)
             except HospitalError as exc:
                 log.warning("checklist FHIR search failed", extra={"fields": {"hospital": hospital.id,
                                                                               "error": str(exc)}})

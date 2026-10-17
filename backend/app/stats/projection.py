@@ -10,6 +10,8 @@ import os
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from sqlalchemy.engine import URL, make_url
+
 SCHEMA = "PacsProjection"
 CLOSED_TASK_STATUSES = ("completed", "cancelled", "rejected", "failed", "entered-in-error")
 UNKNOWN_LABEL = "neznámé"
@@ -90,9 +92,11 @@ def collect_stats(cursor: Cursor) -> dict[str, Any]:
 
 
 def sql_pool_enabled() -> bool:
-    """IRIS_SQL_POOL=1: borrow warm connections from the app_db pool. On the cloud IRIS the first SQL statement of
-    every new connection takes about 30 s, so per-request connections are too slow there."""
-    return os.environ.get("IRIS_SQL_POOL", "").strip() == "1"
+    """IRIS app state always shares its bounded pool; the flag also supports explicit opt-in."""
+    from app.config import get_settings
+
+    return (make_url(get_settings().app_db_url).get_backend_name() == "iris"
+            or os.environ.get("IRIS_SQL_POOL", "").strip() == "1")
 
 
 def pooled_connection() -> Any:
@@ -102,18 +106,22 @@ def pooled_connection() -> Any:
     return get_engine().raw_connection()
 
 
-def warm_pool(size: int = 5) -> None:
+def warm_pool(size: int = 4) -> None:
     """Pay the slow first statement once per pooled connection, concurrently, right after startup."""
     from concurrent.futures import ThreadPoolExecutor
 
     conns = []
     try:
-        conns = [pooled_connection() for _ in range(size)]
+        for _ in range(size):
+            conns.append(pooled_connection())
 
         def ping(conn: Any) -> None:
             cur = conn.cursor()
-            cur.execute("SELECT 1")
-            cur.fetchall()
+            try:
+                cur.execute("SELECT 1")
+                cur.fetchall()
+            finally:
+                cur.close()
 
         with ThreadPoolExecutor(size) as pool:
             list(pool.map(ping, conns))
@@ -124,24 +132,38 @@ def warm_pool(size: int = 5) -> None:
             conn.close()
 
 
-def open_cursor() -> tuple[Any, Callable[[], None]]:
-    """Connect to the IRIS SQL port of the namespace that holds the projection."""
+def sql_connection() -> Any:
+    """Borrow SQL connections, even when app state uses SQLite (local fallback)."""
     if sql_pool_enabled():
-        raw = pooled_connection()
-        return raw.cursor(), raw.close
-    import iris
-
+        return pooled_connection()
     from app.config import get_settings
+    from app.iris_resources import sql_engine
 
-    settings = get_settings()
-    conn = iris.createConnection(
-        os.environ.get("IRIS_SQL_HOST", "localhost"),
-        int(os.environ.get("IRIS_SQL_PORT", "1972")),
-        os.environ.get("IRIS_NAMESPACE", "FHIRSERVER"),
-        settings.iris_user or "SuperUser",
-        settings.iris_password or "SYS",
+    s = get_settings()
+    url = URL.create(
+        "iris", s.iris_user or "SuperUser", s.iris_password or "SYS",
+        host=os.environ.get("IRIS_SQL_HOST", "localhost"), port=int(os.environ.get("IRIS_SQL_PORT", "1972")),
+        database=os.environ.get("IRIS_NAMESPACE", "FHIRSERVER"),
     )
-    return conn.cursor(), conn.close
+    return sql_engine(url).raw_connection()
+
+
+def open_cursor() -> tuple[Any, Callable[[], None]]:
+    """A cursor whose cleanup closes it and returns its connection to the bounded pool."""
+    conn = sql_connection()
+    try:
+        cur = conn.cursor()
+    except Exception:
+        conn.close()
+        raise
+
+    def close() -> None:
+        try:
+            cur.close()
+        finally:
+            conn.close()
+
+    return cur, close
 
 
 def load_stats() -> dict[str, Any]:
