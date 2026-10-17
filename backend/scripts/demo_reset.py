@@ -8,7 +8,8 @@
    runs their checks (LLM cache makes this fast), then runs the nightly preparation so the dashboard shows
    drafted requests waiting for approval.
 
-FHIR resources already written (Task, Communication, AuditEvent, ...) are kept as the audit trail.
+FHIR resources already written (Task, Communication, AuditEvent, ...) are kept as the audit trail; only the
+test radiology reports uploaded from the patient view (tag `test-upload`) are deleted.
 
     uv run python scripts/demo_reset.py            # backup + reset + seed
     uv run python scripts/demo_reset.py --no-seed  # backup + reset only
@@ -27,6 +28,9 @@ from sqlalchemy import text
 
 from app.app_db.session import get_engine
 from app.config import get_settings, today
+from app.fhir_store.base import TEST_UPLOAD_TAG, is_test_upload
+from app.fhir_store.factory import get_store
+from app.fhir_store.iris import IrisFhirStore
 
 APP_TABLES = ["issue_ack", "item_waiver", "case_result", '"case"']
 REQ_SCHEMA = "PacsComparator_Req"
@@ -71,6 +75,18 @@ def backup_and_reset(engine) -> dict:
     return counts
 
 
+def remove_test_uploads() -> int:
+    store = get_store()
+    tag = {"_tag": "|".join(TEST_UPLOAD_TAG)} if isinstance(store, IrisFhirStore) else {}
+    removed = 0
+    for rtype in ("DiagnosticReport", "ImagingStudy"):
+        for res in store.search(rtype, tag):
+            if is_test_upload(res):
+                store.delete(rtype, res["id"])
+                removed += 1
+    return removed
+
+
 def seed(client: TestClient) -> dict:
     demo = json.loads((get_settings().data_dir / "demo_patients.json").read_text(encoding="utf-8"))
     ids = [p["patient_id"] for p in demo.get("patients", [])]
@@ -97,7 +113,7 @@ def main() -> int:
     args = ap.parse_args()
     from app.main import create_app
 
-    print(json.dumps({"deleted": backup_and_reset(get_engine())}, indent=1))
+    print(json.dumps({"deleted": backup_and_reset(get_engine()), "test_uploads": remove_test_uploads()}, indent=1))
     if not args.no_seed:
         with TestClient(create_app()) as client:  # in-process, same IRIS and production as the real app
             print(json.dumps(seed(client), indent=1))

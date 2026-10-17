@@ -11,6 +11,7 @@ import SourceDrawer from "../components/SourceDrawer";
 import RequestDrawer from "../components/RequestDrawer";
 import AgentChat from "../components/AgentChat";
 import StudyStatusList from "../components/StudyStatusList";
+import TestReportUpload from "../components/TestReportUpload";
 import { ReadinessTag } from "../components/ReadinessBadge";
 import { formatDate } from "../components/format";
 import { Button, ErrorState } from "../components/ui";
@@ -30,10 +31,15 @@ export default function PatientDetail() {
   const [source, setSource] = useState<SourceRef | null>(null);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [details, setDetails] = useState(false);
+  const [running, setRunning] = useState(false);
   const pollTimer = useRef<number>();
 
-  const { data, isLoading, error, refetch } = useCaseDetail(caseId, polling ? POLL_MS : 0);
+  const { data, isLoading, error, refetch } = useCaseDetail(caseId, polling || running ? POLL_MS : 0);
   const recheck = useRecheck(caseId);
+
+  // keep polling while the backend check runs (it can take a while when the LLM reads a new report)
+  const checkStatus = data?.check_status;
+  useEffect(() => setRunning(checkStatus === "running" || checkStatus === "pending"), [checkStatus]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("presentation", presentation);
@@ -42,16 +48,13 @@ export default function PatientDetail() {
 
   useEffect(() => () => window.clearTimeout(pollTimer.current), []);
 
-  const onRecheck = () => {
-    recheck.mutate(undefined, {
-      onSuccess: () => {
-        // the backend check runs in the background, so poll for a while
-        setPolling(true);
-        window.clearTimeout(pollTimer.current);
-        pollTimer.current = window.setTimeout(() => setPolling(false), POLL_DURATION_MS);
-      },
-    });
+  const startPolling = () => {
+    // the backend check runs in the background, so poll for a while
+    setPolling(true);
+    window.clearTimeout(pollTimer.current);
+    pollTimer.current = window.setTimeout(() => setPolling(false), POLL_DURATION_MS);
   };
+  const onRecheck = () => recheck.mutate(undefined, { onSuccess: startPolling });
 
   const openSource = useCallback(
     (docId: string, quote: string | null) => setSource({ docId, quote }),
@@ -94,6 +97,7 @@ export default function PatientDetail() {
           <span className="inline-flex items-center gap-2" data-readiness={data.case.readiness} title={data.case.reason}>
             <ReadinessTag state={data.case.readiness} />
           </span>
+          {!presentation && <TestReportUpload caseId={caseId} onUploaded={startPolling} />}
           <Button
             variant="secondary"
             icon="list"

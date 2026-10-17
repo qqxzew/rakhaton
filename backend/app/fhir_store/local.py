@@ -13,10 +13,12 @@ from collections import OrderedDict
 from pathlib import Path
 
 from app.config import Settings, get_settings
-from app.fhir_store.base import FhirStore, FhirStoreError, PatientNotFound, Resource
+from app.fhir_store.base import FhirStore, FhirStoreError, PatientNotFound, Resource, is_test_upload
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 _BUNDLE_CACHE_SIZE = 64
+
+_UPLOAD_TYPES = {"ImagingStudy", "DiagnosticReport"}
 
 
 class LocalBundleStore(FhirStore):
@@ -54,11 +56,16 @@ class LocalBundleStore(FhirStore):
 
     def resources(self, patient_id: str, resource_type: str) -> list[Resource]:
         bundle = self.get_patient_bundle(patient_id)
-        return [
+        found = [
             e["resource"]
             for e in bundle.get("entry", [])
             if e.get("resource", {}).get("resourceType") == resource_type
         ]
+        if resource_type not in _UPLOAD_TYPES:
+            return found
+        # test reports uploaded from the UI live next to our derived resources
+        subject = f"Patient/{patient_id}"
+        return found + [r for r in self.search(resource_type, {"subject": subject}) if is_test_upload(r)]
 
     def _out_path(self, resource_type: str, resource_id: str) -> Path:
         if not _SAFE_ID.match(resource_type) or not _SAFE_ID.match(resource_id):
@@ -83,6 +90,12 @@ class LocalBundleStore(FhirStore):
         if "resourceType" not in resource or "id" not in resource:
             raise FhirStoreError("update needs resourceType and id")
         return self._write(resource)
+
+    def delete(self, resource_type: str, resource_id: str) -> None:
+        self._out_path(resource_type, resource_id).unlink(missing_ok=True)
+
+    def forget(self, patient_id: str) -> None:
+        self._bundles.pop(patient_id, None)
 
     def search(self, resource_type: str, params: dict[str, str] | None = None) -> list[Resource]:
         folder = self.out_dir / resource_type

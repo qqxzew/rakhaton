@@ -26,6 +26,7 @@ Backup video of the whole flow: `data/demo/pacs_komparator_demo.mp4` (2:08, Czec
 | 4 | Dashboard → Schválit vše | "Koordinátor jen schválí. E-mail obsahuje jen minimum údajů." Show Mailpit. |
 | 5 | Posunout čas +24 h (twice) | "Bez odpovědi přijde připomínka, pak automatický hovor – bez identity pacienta." Open "Zobrazit žádost" (e-mail, reminder, voice transcript). |
 | 6 | Row "Simulace" → Simulovat odpověď / doručení | "Nemocnice pošle studii přes IHE MHD, systém ověří, že odpovídá." The row turns **Vyžaduje pozornost – snímky dorazily**; click "Potvrdit převzetí" (and "Vzít na vědomí" on any open issue in Podrobnosti) → **Připraveno**. |
+| 6b | Patient → **Nahrát testovací nález** | "Ať vidíte, že to běží naživo: nahrajeme nový nález (soubor .txt nebo vzorový text), uloží se do IRIS FHIR a AI ho hned přečte." Takes about 20 s; the cited PET/CT appears as a new missing study. Afterwards **Odstranit testovací nálezy** in the same dialog restores the case. |
 | 7 | Ask | "Jdeme správným směrem? Co by vám ještě chybělo?" |
 
 Numbers to say (Statistiky page, silver standard over 120 reports / 121 unambiguous citations): AI finds **99 %** of cited prior studies, dates **100 %** correct, every quote verified verbatim. Only **41 %** of cited priors exist in Motol data; a naive "latest study of the same modality" rule finds only **35 %** → reading the report text is the point.
@@ -45,5 +46,6 @@ Numbers to say (Statistiky page, silver standard over 120 reports / 121 unambigu
 
 - Dashboard shows a CSS error → restart `npm run dev` (Tailwind config changed).
 - Patient Search returns 413 / FHIR "too costly" → rerun `uv run python scripts/iris_setup.py`.
+- Test reports left over → the dialog's "Odstranit testovací nálezy", or `demo_reset.py` (deletes all of them).
 - Requests stuck after experiments → `uv run python scripts/demo_reset.py` (backup in `data/backup/`).
 - Voice uses the premade ElevenLabs voice set in `.env` (`ELEVENLABS_VOICE_ID`); free plan quota is limited, the transcript always works.

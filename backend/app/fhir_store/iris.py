@@ -149,6 +149,15 @@ class IrisFhirStore(FhirStore):
     def search(self, resource_type: str, params: dict[str, str] | None = None) -> list[Resource]:
         return self._search_all(resource_type, dict(params or {}))
 
+    def delete(self, resource_type: str, resource_id: str) -> None:
+        resp = self._request("DELETE", f"{self.base}/{resource_type}/{resource_id}")
+        if resp.status_code >= 300 and resp.status_code not in (404, 410):
+            raise FhirStoreError(f"IRIS FHIR DELETE {resource_type} failed: HTTP {resp.status_code} "
+                                 f"{_outcome_text(resp)}")
+
+    def forget(self, patient_id: str) -> None:
+        self._bundles.pop(patient_id, None)
+
 
 def _outcome_text(resp: httpx.Response) -> str:
     try:

@@ -156,6 +156,20 @@ export const cs = {
     treatment: "Léčba",
     mdt: "MDT",
   },
+  testReport: {
+    open: "Nahrát testovací nález",
+    title: "Nahrát testovací radiologický nález",
+    hint: "Nález se uloží do IRIS FHIR jako nová studie pacienta (simulace) a kontrola proběhne znovu: AI přečte text, najde srovnávací vyšetření a výsledek se objeví v seznamu. Data v textu pište tak, jak je vidíte v aplikaci.",
+    file: "Soubor s nálezem (.txt)",
+    text: "Text nálezu",
+    date: "Datum vyšetření",
+    modality: "Modalita",
+    submit: "Nahrát a zkontrolovat",
+    sending: "Ukládám…",
+    loading: "Připravuji vzor…",
+    template: "Vložit vzorový text",
+    remove: (n: number) => `Odstranit testovací nálezy (${n})`,
+  },
   summary: {
     born: (year?: number | null, band?: string | null) =>
       year ? `nar. ${year}` : band ? `nar. ${band.replace("-", "–")}` : "rok narození neznámý",
