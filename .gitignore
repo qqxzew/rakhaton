@@ -1,2 +1,14 @@
 .env 
 .claude/ 
+# challenge data (non-public, never commit)
+*.zip
+data/
+dataset/
+
+# tooling
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+dist/

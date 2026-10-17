@@ -1,0 +1,106 @@
+/* Roboto, Latin + Latin Extended (Czech diacritics) only */
+@import "@fontsource/roboto/latin-400.css";
+@import "@fontsource/roboto/latin-500.css";
+@import "@fontsource/roboto/latin-700.css";
+@import "@fontsource/roboto/latin-ext-400.css";
+@import "@fontsource/roboto/latin-ext-500.css";
+@import "@fontsource/roboto/latin-ext-700.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  /* presentation mode scales everything through the root font size */
+  font-size: 14px;
+}
+
+html.presentation {
+  font-size: 18px;
+}
+
+/* demo controls never show on the projector */
+html.presentation .demo-only {
+  display: none;
+}
+
+body {
+  @apply bg-nis-page font-sans text-base text-nis-text antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid #0b6cf0;
+  outline-offset: 2px;
+}
+
+/* Shared NIS primitives. React wrappers live in src/components/ui; see DESIGN.md. */
+@layer components {
+  .nis-panel {
+    @apply rounded-nis border border-nis-line bg-white;
+  }
+  .nis-panel-body {
+    @apply p-3;
+  }
+
+  .nis-label {
+    @apply text-2xs font-bold uppercase tracking-wide text-nis-muted;
+  }
+
+  .nis-btn {
+    @apply inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded px-3 text-base font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .nis-btn-primary {
+    @apply nis-btn bg-accent-600 text-white hover:bg-accent-700;
+  }
+  .nis-btn-secondary {
+    @apply nis-btn border border-nis-line bg-white text-accent-600 hover:border-accent-600 hover:bg-accent-50;
+  }
+  .nis-btn-ghost {
+    @apply nis-btn text-accent-600 hover:bg-accent-50;
+  }
+  .nis-btn-icon {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded text-nis-ink hover:bg-accent-50 hover:text-accent-600 disabled:opacity-40;
+  }
+
+  .nis-input {
+    @apply h-8 w-full rounded border border-nis-line bg-white px-2 text-base text-nis-text placeholder:text-nis-icon focus:border-accent-600 focus:outline-none focus:ring-1 focus:ring-accent-600;
+  }
+
+  .nis-link {
+    @apply font-medium text-accent-600 hover:underline;
+  }
+
+  /* Dense table: gray header, thin separators, 36-40 px rows. */
+  .nis-table {
+    @apply w-full border-collapse text-left text-sm;
+  }
+  .nis-table thead th {
+    @apply border-b border-nis-line bg-nis-head px-2.5 py-2 font-bold text-nis-text;
+  }
+  .nis-table tbody td {
+    @apply border-b border-nis-line px-2.5 py-2 align-top;
+  }
+  .nis-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* Pastel status rows (combine with nis-table rows or list rows). */
+  .nis-row-ready {
+    @apply bg-nis-ready;
+  }
+  .nis-row-attention {
+    @apply bg-nis-attention;
+  }
+  .nis-row-danger {
+    @apply bg-nis-danger;
+  }
+  .nis-row-info {
+    @apply bg-nis-info;
+  }
+
+  /* Gray hatching for empty slots (like an unused operating room). */
+  .nis-hatch {
+    background-color: #eef1f5;
+    background-image: repeating-linear-gradient(135deg, transparent 0 6px, #dfe4eb 6px 7px);
+  }
+}

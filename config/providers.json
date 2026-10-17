@@ -1,0 +1,158 @@
+[
+  {
+    "id": "motol",
+    "name": "FN Motol, Radiodiagnostická klinika",
+    "aliases": [
+      "FN Motol",
+      "Motol",
+      "KZM"
+    ],
+    "email": "radiologie@motol.example",
+    "phone": "+420 000 000 000",
+    "hours": "Po-Pá 7:00-15:30",
+    "language": "cs",
+    "preferred_channel": "email",
+    "fhir_base": "/fhir/r4",
+    "exchange_route": "ePACS"
+  },
+  {
+    "id": "nnh",
+    "name": "Nemocnice Na Homolce",
+    "aliases": [
+      "NNH",
+      "Homolka",
+      "Na Homolce",
+      "HBMP-NNH"
+    ],
+    "email": "radiologie@nnh.example",
+    "phone": "+420 000 000 001",
+    "hours": "Po-Pá 7:00-15:30",
+    "language": "cs",
+    "preferred_channel": "email",
+    "fhir_base": "/nnh/fhir/r4",
+    "exchange_route": "ePACS"
+  },
+  {
+    "id": "homolka",
+    "name": "Homolka, druhé pracoviště (simulace)",
+    "aliases": [],
+    "email": "radiologie@homolka.example",
+    "phone": "+420 000 000 009",
+    "hours": "Po-Pá 7:00-15:30",
+    "language": "cs",
+    "preferred_channel": "email",
+    "fhir_base": "/homolka/fhir/r4",
+    "exchange_route": "ePACS"
+  },
+  {
+    "id": "vfn",
+    "name": "Všeobecná fakultní nemocnice v Praze",
+    "aliases": [
+      "VFN"
+    ],
+    "email": "radiologie@vfn.example",
+    "phone": "+420 000 000 002",
+    "hours": "Po-Pá 7:00-15:30",
+    "language": "cs",
+    "preferred_channel": "email",
+    "exchange_route": "ePACS"
+  },
+  {
+    "id": "fnm",
+    "name": "FNM",
+    "aliases": [
+      "FNM"
+    ],
+    "email": "radiologie@fnm.example",
+    "phone": "+420 000 000 003",
+    "hours": "Po-Pá 7:00-15:30",
+    "language": "cs",
+    "preferred_channel": "email",
+    "fhir_base": "/fnm/fhir/r4",
+    "exchange_route": "secure link"
+  },
+  {
+    "id": "ikem",
+    "name": "IKEM",
+    "aliases": [
+      "IKEM"
+    ],
+    "email": "radiologie@ikem.example",
+    "phone": "+420 000 000 004",
+    "hours": "Po-Pá 7:00-15:30",
+    "language": "cs",
+    "preferred_channel": "email",
+    "exchange_route": "ePACS"
+  },
+  {
+    "id": "bulovka",
+    "name": "Nemocnice Na Bulovce",
+    "aliases": [
+      "Bulovka",
+      "Na Bulovce",
+      "FNB"
+    ],
+    "email": "radiologie@bulovka.example",
+    "phone": "+420 000 000 005",
+    "hours": "Po-Pá 7:00-15:30",
+    "language": "cs",
+    "preferred_channel": "email",
+    "exchange_route": "ePACS"
+  },
+  {
+    "id": "thomayer",
+    "name": "Thomayerova nemocnice",
+    "aliases": [
+      "Thomayer",
+      "Thomayerova",
+      "FTN"
+    ],
+    "email": "radiologie@thomayer.example",
+    "phone": "+420 000 000 006",
+    "hours": "Po-Pá 7:00-15:30",
+    "language": "cs",
+    "preferred_channel": "email",
+    "exchange_route": "ePACS"
+  },
+  {
+    "id": "plzen",
+    "name": "FN Plzeň",
+    "aliases": [
+      "FN Plzeň",
+      "Plzeň",
+      "FNPl"
+    ],
+    "email": "radiologie@fnplzen.example",
+    "phone": "+420 000 000 007",
+    "hours": "Po-Pá 7:00-15:30",
+    "language": "cs",
+    "preferred_channel": "email",
+    "exchange_route": "CD/DVD"
+  },
+  {
+    "id": "brno",
+    "name": "FN Brno",
+    "aliases": [
+      "FN Brno",
+      "Brno",
+      "FNBrno"
+    ],
+    "email": "radiologie@fnbrno.example",
+    "phone": "+420 000 000 008",
+    "hours": "Po-Pá 7:00-15:30",
+    "language": "cs",
+    "preferred_channel": "email",
+    "exchange_route": "ePACS"
+  },
+  {
+    "id": "unknown",
+    "name": "Neznámé pracoviště",
+    "aliases": [],
+    "email": "",
+    "phone": "",
+    "hours": "",
+    "language": "cs",
+    "preferred_channel": "email",
+    "exchange_route": "ePACS"
+  }
+]

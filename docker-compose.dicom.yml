@@ -1,0 +1,48 @@
+# Simulated PACS (one Orthanc per hospital, each with its own AE title). Override file, start only these:
+#   docker compose -f docker-compose.yml -f docker-compose.dicom.yml up -d orthanc-motol orthanc-nnh orthanc-homolka orthanc-fnm
+# All content is synthetic (backend/scripts/seed_dicom.py). IRIS reaches them as host.docker.internal:<DICOM port>.
+x-orthanc: &orthanc
+  image: orthancteam/orthanc:latest
+  restart: unless-stopped
+  environment: &orthanc-env
+    ORTHANC__AUTHENTICATION_ENABLED: "false"
+    ORTHANC__REMOTE_ACCESS_ALLOWED: "true"
+    ORTHANC__DICOM_ALWAYS_ALLOW_FIND: "true"
+    ORTHANC__DICOM_ALWAYS_ALLOW_STORE: "true"
+    ORTHANC__DICOM_CHECK_CALLED_AE_TITLE: "false"
+    ORTHANC__DICOM_PORT: "4242"
+    ORTHANC__STORAGE_COMPRESSION: "false"
+
+services:
+  orthanc-motol:
+    <<: *orthanc
+    container_name: pacs-orthanc-motol
+    ports: ["4251:4242", "8051:8042"]
+    environment:
+      <<: *orthanc-env
+      ORTHANC__NAME: "Simulace PACS FN Motol"
+      ORTHANC__DICOM_AET: MOTOL
+  orthanc-nnh:
+    <<: *orthanc
+    container_name: pacs-orthanc-nnh
+    ports: ["4252:4242", "8052:8042"]
+    environment:
+      <<: *orthanc-env
+      ORTHANC__NAME: "Simulace PACS NNH"
+      ORTHANC__DICOM_AET: NNH
+  orthanc-homolka:
+    <<: *orthanc
+    container_name: pacs-orthanc-homolka
+    ports: ["4253:4242", "8053:8042"]
+    environment:
+      <<: *orthanc-env
+      ORTHANC__NAME: "Simulace PACS Homolka"
+      ORTHANC__DICOM_AET: HOMOLKA
+  orthanc-fnm:
+    <<: *orthanc
+    container_name: pacs-orthanc-fnm
+    ports: ["4254:4242", "8054:8042"]
+    environment:
+      <<: *orthanc-env
+      ORTHANC__NAME: "Simulace PACS FNM"
+      ORTHANC__DICOM_AET: FNM

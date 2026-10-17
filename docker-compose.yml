@@ -1,0 +1,22 @@
+services:
+  iris:
+    container_name: iris-fhir
+    build:
+      context: ./infra/iris
+    ports:
+      - "1972:1972"
+      - "52773:52773"
+    environment:
+      ISC_DATA_DIRECTORY: /durable
+    volumes:
+      - iris-data:/durable
+
+  mailpit:
+    container_name: mailpit
+    image: axllent/mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  iris-data:
