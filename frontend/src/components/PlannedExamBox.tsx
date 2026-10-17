@@ -3,6 +3,7 @@ import { cs } from "../i18n/cs";
 import type { PlannedExam } from "../services/api-types";
 import { useUpdatePlannedExam } from "../services/api";
 import { formatDate, parseRegions, percent, regionLabel, regionsText } from "./format";
+import { Button, Field, FieldLabel, Panel } from "./ui";
 
 interface Props {
   caseId: string;
@@ -33,76 +34,63 @@ export default function PlannedExamBox({ caseId, exam, onOpenSource }: Props) {
     );
   };
 
-  const field = "rounded border border-slate-400 px-2 py-1 w-full";
-
   return (
-    <section className="rounded-xl border border-slate-300 bg-white p-4 shadow-sm" aria-labelledby="planned-exam-title">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 id="planned-exam-title" className="text-xl font-bold">
-          {cs.plannedExam.title}
-        </h2>
-        {!editing && (
-          <button
-            type="button"
-            onClick={startEdit}
-            className="rounded border-2 border-accent-600 px-3 py-1 font-semibold text-accent-700 hover:bg-accent-50"
-          >
+    <Panel
+      id="planned-exam"
+      icon="calendar"
+      title={cs.plannedExam.title}
+      actions={
+        !editing && (
+          <Button icon="edit" onClick={startEdit}>
             {cs.common.edit}
-          </button>
-        )}
-      </div>
-
+          </Button>
+        )
+      }
+    >
       {editing ? (
         <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3">
-          <label className="block">
-            <span className="text-sm font-semibold">{cs.plannedExam.modality}</span>
-            <input className={field} value={modality} onChange={(e) => setModality(e.target.value)} required />
-          </label>
-          <label className="block">
-            <span className="text-sm font-semibold">{cs.plannedExam.regions}</span>
-            <input className={field} value={regions} onChange={(e) => setRegions(e.target.value)} />
-            <span className="text-xs text-slate-600">{cs.plannedExam.regionsHint}</span>
-          </label>
-          <label className="block">
-            <span className="text-sm font-semibold">{cs.plannedExam.date}</span>
-            <input type="date" className={field} value={date} onChange={(e) => setDate(e.target.value)} />
-          </label>
+          <div>
+            <FieldLabel htmlFor="pe-modality">{cs.plannedExam.modality}</FieldLabel>
+            <input id="pe-modality" className="nis-input mt-1" value={modality} onChange={(e) => setModality(e.target.value)} required />
+          </div>
+          <div>
+            <FieldLabel htmlFor="pe-regions">{cs.plannedExam.regions}</FieldLabel>
+            <input id="pe-regions" className="nis-input mt-1" value={regions} onChange={(e) => setRegions(e.target.value)} />
+            <span className="text-xs text-nis-muted">{cs.plannedExam.regionsHint}</span>
+          </div>
+          <div>
+            <FieldLabel htmlFor="pe-date">{cs.plannedExam.date}</FieldLabel>
+            <input id="pe-date" type="date" className="nis-input mt-1" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
           <div className="flex items-center gap-2 sm:col-span-3">
-            <button
-              type="submit"
-              disabled={update.isPending}
-              className="rounded bg-accent-600 px-4 py-1.5 font-semibold text-white hover:bg-accent-700 disabled:opacity-60"
-            >
+            <Button type="submit" variant="primary" disabled={update.isPending}>
               {update.isPending ? cs.plannedExam.saving : cs.common.save}
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="rounded border border-slate-400 px-4 py-1.5 font-semibold"
-            >
-              {cs.common.cancel}
-            </button>
+            </Button>
+            <Button onClick={() => setEditing(false)}>{cs.common.cancel}</Button>
             {update.isError && (
-              <span role="alert" className="text-red-800">
+              <span role="alert" className="text-nis-red">
                 {cs.common.error}: {update.error.message}
               </span>
             )}
           </div>
         </form>
       ) : exam ? (
-        <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-4">
-          <Fact label={cs.plannedExam.modality} value={exam.modality} />
-          <Fact label={cs.plannedExam.regions} value={regionsText(exam.regions)} />
-          <Fact label={cs.plannedExam.date} value={formatDate(exam.date)} />
-          <Fact label={cs.plannedExam.site} value={exam.site ?? cs.common.none} />
+        <div className="flex flex-wrap gap-x-10 gap-y-3">
+          <Field label={cs.plannedExam.modality}>
+            <span className="text-lg font-bold">{exam.modality}</span>
+          </Field>
+          <Field label={cs.plannedExam.regions}>{regionsText(exam.regions)}</Field>
+          <Field label={cs.plannedExam.date}>
+            <span className="font-medium text-accent-600">{formatDate(exam.date)}</span>
+          </Field>
+          <Field label={cs.plannedExam.site}>{exam.site ?? cs.common.none}</Field>
           {exam.quote && (
-            <div className="sm:col-span-2 lg:col-span-4">
-              <div className="text-sm font-semibold text-slate-600">{cs.plannedExam.quote}</div>
+            <Field label={cs.plannedExam.quote} className="min-w-[16rem] flex-1">
               {exam.source_doc_id ? (
                 <button
                   type="button"
                   onClick={() => onOpenSource(exam.source_doc_id as string, exam.quote)}
-                  className="mt-0.5 text-left italic text-accent-700 underline decoration-dotted underline-offset-4 hover:text-accent-600"
+                  className="text-left italic text-accent-600 underline decoration-dotted underline-offset-4 hover:text-accent-700"
                   title={cs.plannedExam.openSource}
                 >
                   „{exam.quote}“
@@ -110,24 +98,15 @@ export default function PlannedExamBox({ caseId, exam, onOpenSource }: Props) {
               ) : (
                 <span className="italic">„{exam.quote}“</span>
               )}
-              <span className="ml-2 text-sm text-slate-600">
+              <span className="ml-2 text-sm text-nis-muted">
                 {cs.common.confidence}: {percent(exam.confidence)}
               </span>
-            </div>
+            </Field>
           )}
         </div>
       ) : (
-        <p className="text-slate-600">{cs.plannedExam.empty}</p>
+        <p className="text-nis-muted">{cs.plannedExam.empty}</p>
       )}
-    </section>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-sm font-semibold text-slate-600">{label}</div>
-      <div className="text-lg">{value}</div>
-    </div>
+    </Panel>
   );
 }

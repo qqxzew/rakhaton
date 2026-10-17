@@ -9,6 +9,7 @@ import OpenIssuesPanel from "../components/OpenIssuesPanel";
 import PlannedExamBox from "../components/PlannedExamBox";
 import RequiredItemsTable from "../components/RequiredItemsTable";
 import SourceDrawer from "../components/SourceDrawer";
+import { ErrorState } from "../components/ui";
 
 const POLL_MS = 2000;
 const POLL_DURATION_MS = 20000;
@@ -52,27 +53,20 @@ export default function PatientDetail() {
   );
   const closeSource = useCallback(() => setSource(null), []);
 
-  if (isLoading) return <p className="p-6 text-lg">{cs.app.loading}</p>;
+  if (isLoading) return <p className="nis-panel p-4 text-nis-muted">{cs.app.loading}</p>;
 
   if (error || !data) {
     return (
-      <div className="p-6" role="alert">
-        <p className="text-lg text-red-800">
-          {cs.common.error}: {error?.message}
-        </p>
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          className="mt-2 rounded border-2 border-accent-600 px-3 py-1 font-semibold text-accent-700"
-        >
-          {cs.common.retry}
-        </button>
-      </div>
+      <ErrorState
+        message={`${cs.common.error}: ${error?.message ?? ""}`}
+        retryLabel={cs.common.retry}
+        onRetry={() => void refetch()}
+      />
     );
   }
 
   return (
-    <div className="mx-auto max-w-[110rem] space-y-4 p-4">
+    <div className="space-y-3">
       <HeaderStrip
         data={data}
         presentation={presentation}
@@ -81,7 +75,7 @@ export default function PatientDetail() {
         onTogglePresentation={() => setPresentation((p) => !p)}
       />
       {recheck.isError && (
-        <p role="alert" className="text-red-800">
+        <p role="alert" className="nis-panel nis-row-danger px-3 py-2">
           {cs.common.error}: {recheck.error.message}
         </p>
       )}

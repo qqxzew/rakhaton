@@ -1,10 +1,11 @@
 import { cs } from "../i18n/cs";
 
+/** Dashed outline tag marking simulated data (CLAUDE.md hard rule 5). */
 export default function SimulaceTag() {
   return (
     <span
       title={cs.common.simulatedHint}
-      className="inline-flex items-center rounded border border-dashed border-slate-500 bg-slate-50 px-1.5 py-0.5 text-[0.7rem] font-semibold uppercase tracking-wide text-slate-700"
+      className="inline-flex items-center whitespace-nowrap rounded-[3px] border border-dashed border-nis-ink bg-white px-1.5 text-2xs font-bold uppercase leading-5 tracking-wide text-nis-ink"
     >
       {cs.common.simulated}
     </span>

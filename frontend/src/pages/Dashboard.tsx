@@ -1,93 +1,131 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { cs } from "../i18n/cs";
 import { useDashboard } from "../services/api";
+import type { DashboardDay, MeetingSummary, ReadinessState } from "../services/api-types";
 import { formatDayMonth, weekdayShort } from "../components/format";
-import { CountsText, ReadinessLabel } from "../components/ReadinessLabel";
+import { CountsText } from "../components/ReadinessLabel";
+import { ReadinessTag } from "../components/ReadinessBadge";
+import { ErrorState, PillTabs, READINESS_ROW, SectionHeader, StatChip } from "../components/ui";
+
+type Filter = "all" | ReadinessState;
+
+const STATES: ReadinessState[] = ["not_ready", "attention", "ready"];
+
+const ICON_COLOR: Record<ReadinessState, string> = {
+  ready: "text-nis-green",
+  attention: "text-[#9a6b00]",
+  not_ready: "text-nis-red",
+};
+
+const CARD_BORDER: Record<ReadinessState, string> = {
+  ready: "border-[#b9d9a6]",
+  attention: "border-[#ecd77e]",
+  not_ready: "border-[#efb3b3]",
+};
 
 export default function Dashboard() {
   const { data, isLoading, error, refetch } = useDashboard();
+  const [filter, setFilter] = useState<Filter>("all");
 
-  if (isLoading) return <p className="p-6 text-lg">{cs.app.loading}</p>;
+  if (isLoading) return <p className="nis-panel p-4 text-nis-muted">{cs.app.loading}</p>;
   if (error || !data) {
     return (
-      <div className="p-6" role="alert">
-        <p className="text-lg text-red-800">
-          {cs.common.error}: {error?.message}
-        </p>
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          className="mt-2 rounded border-2 border-accent-600 px-3 py-1 font-semibold text-accent-700"
-        >
-          {cs.common.retry}
-        </button>
-      </div>
+      <ErrorState
+        message={`${cs.common.error}: ${error?.message ?? ""}`}
+        retryLabel={cs.common.retry}
+        onRetry={() => void refetch()}
+      />
     );
   }
 
   const { totals } = data;
-  return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4">
-      <h1 className="text-3xl font-bold">
-        {cs.dashboard.title(formatDayMonth(data.start), formatDayMonth(data.end))}
-      </h1>
+  const meetings = data.days.flatMap((d) => d.meetings);
+  const meetingCount = (s: ReadinessState) => meetings.filter((m) => m.readiness === s).length;
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5" data-testid="summary-tiles">
-        <Tile label={cs.dashboard.totalMeetings} value={totals.meetings} />
-        <Tile label={cs.dashboard.totalCases} value={totals.cases} />
-        <Tile label={cs.readiness.not_ready} value={totals.counts.not_ready} state="not_ready" />
-        <Tile label={cs.readiness.attention} value={totals.counts.attention} state="attention" />
-        <Tile label={cs.readiness.ready} value={totals.counts.ready} state="ready" />
+  return (
+    <div className="space-y-3">
+      <SectionHeader icon="calendar" title={cs.dashboard.title(formatDayMonth(data.start), formatDayMonth(data.end))} />
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PillTabs<Filter>
+          label={cs.dashboard.filterLabel}
+          value={filter}
+          onChange={setFilter}
+          tabs={[
+            { id: "all", label: cs.dashboard.filterAll, count: meetings.length },
+            ...STATES.map((s) => ({ id: s, label: cs.readiness[s], count: meetingCount(s) })),
+          ]}
+        />
+        <div className="flex flex-wrap gap-2" data-testid="summary-tiles">
+          <StatChip icon="calendar" label={cs.dashboard.totalMeetings} value={totals.meetings} />
+          <StatChip icon="users" label={cs.dashboard.totalCases} value={totals.cases} />
+          {STATES.map((s) => (
+            <StatChip
+              key={s}
+              icon={s === "ready" ? "checkCircle" : s === "attention" ? "warning" : "crossCircle"}
+              iconClass={ICON_COLOR[s]}
+              label={cs.readiness[s]}
+              value={totals.counts[s]}
+            />
+          ))}
+        </div>
       </div>
 
-      {totals.meetings === 0 && <p className="text-lg">{cs.dashboard.emptyWindow}</p>}
+      {totals.meetings === 0 && (
+        <p className="nis-panel nis-row-info px-3 py-2.5">{cs.dashboard.emptyWindow}</p>
+      )}
 
-      <ol className="space-y-3">
-        {data.days.map((day) => (
-          <li key={day.date} className="rounded-xl border border-slate-300 bg-white p-3 shadow-sm">
-            <h2 className="text-xl font-bold">
-              <Link className="text-accent-700 underline" to={`/dny/${day.date}`}>
-                {weekdayShort(day.date)} {formatDayMonth(day.date)}
-              </Link>
-            </h2>
-            {day.meetings.length === 0 ? (
-              <p className="mt-1 text-slate-600">{cs.dashboard.noMeetings}</p>
-            ) : (
-              <ul className="mt-2 space-y-2">
-                {day.meetings.map((m) => (
-                  <li key={m.id} className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <Link className="font-semibold text-accent-700 underline" to={`/dny/${day.date}#${m.id}`}>
-                      {m.time} {m.label}
-                    </Link>
-                    <ReadinessLabel state={m.readiness} reason={m.reason} />
-                    <span className="text-slate-700">{cs.dashboard.patients(m.case_count)}</span>
-                    {m.case_count > 0 && (
-                      <span className="text-sm text-slate-700">
-                        {cs.dashboard.meetingCounts}: <CountsText counts={m.counts} />
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        ))}
-      </ol>
+      <div className="nis-panel overflow-x-auto">
+        <ol className="grid min-w-[56rem]" style={{ gridTemplateColumns: `repeat(${data.days.length || 1}, minmax(0, 1fr))` }}>
+          {data.days.map((day, i) => (
+            <DayColumn key={day.date} day={day} filter={filter} first={i === 0} />
+          ))}
+        </ol>
+      </div>
     </div>
   );
 }
 
-const TILE: Record<string, string> = {
-  ready: "border-green-600 bg-green-50",
-  attention: "border-amber-600 bg-amber-50",
-  not_ready: "border-red-600 bg-red-50",
-};
-
-function Tile({ label, value, state }: { label: string; value: number; state?: string }) {
+function DayColumn({ day, filter, first }: { day: DashboardDay; filter: Filter; first: boolean }) {
+  const shown = day.meetings.filter((m) => filter === "all" || m.readiness === filter);
+  const empty = day.meetings.length === 0;
   return (
-    <div className={`rounded-xl border-2 p-3 ${state ? TILE[state] : "border-slate-300 bg-white"}`}>
-      <div className="text-3xl font-bold">{value}</div>
-      <div className="font-medium">{label}</div>
-    </div>
+    <li className={`flex min-w-0 flex-col ${first ? "" : "border-l border-nis-line"}`}>
+      <h2 className="border-b border-nis-line px-2 py-2 text-center">
+        <Link className="font-bold text-nis-text hover:text-accent-600" to={`/dny/${day.date}`}>
+          {weekdayShort(day.date)} {formatDayMonth(day.date)}
+        </Link>
+      </h2>
+      <div className={`flex min-h-[22rem] flex-1 flex-col gap-2 p-1.5 ${empty ? "nis-hatch" : ""}`}>
+        {empty ? (
+          <p className="pt-2 text-center text-sm text-nis-muted">{cs.dashboard.noMeetings}</p>
+        ) : (
+          shown.map((m) => <MeetingCard key={m.id} date={day.date} m={m} />)
+        )}
+      </div>
+    </li>
+  );
+}
+
+function MeetingCard({ date, m }: { date: string; m: MeetingSummary }) {
+  return (
+    <Link
+      to={`/dny/${date}#${m.id}`}
+      className={`block rounded-nis border p-2 text-sm hover:border-accent-600 ${READINESS_ROW[m.readiness]} ${CARD_BORDER[m.readiness]}`}
+    >
+      <div className="font-bold text-accent-600">{m.time}</div>
+      <div className="font-bold leading-snug text-nis-text">{m.label}</div>
+      <div className="mt-1 text-nis-ink">{cs.dashboard.patients(m.case_count)}</div>
+      {m.case_count > 0 && (
+        <div className="text-xs text-nis-muted">
+          {cs.dashboard.meetingCounts}: <CountsText counts={m.counts} />
+        </div>
+      )}
+      <div className="mt-1.5">
+        <ReadinessTag state={m.readiness} />
+      </div>
+      <div className="mt-1 text-xs leading-snug text-nis-ink">{m.reason}</div>
+    </Link>
   );
 }

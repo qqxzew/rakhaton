@@ -1,91 +1,135 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { cs } from "../i18n/cs";
-import { useDay } from "../services/api";
+import { useDay, useScheduleDates } from "../services/api";
 import { formatDayMonth, weekdayShort } from "../components/format";
-import { ReadinessLabel } from "../components/ReadinessLabel";
+import ReadinessBadge, { ReadinessTag } from "../components/ReadinessBadge";
+import {
+  ButtonLink,
+  DataTable,
+  DateNav,
+  ErrorState,
+  HeaderDivider,
+  Icon,
+  Panel,
+  READINESS_ROW,
+  SectionHeader,
+} from "../components/ui";
 
 export default function DayView() {
   const { date = "" } = useParams<{ date: string }>();
+  const navigate = useNavigate();
   const { data, isLoading, error, refetch } = useDay(date);
+  const dates = useScheduleDates().data ?? [];
 
-  if (isLoading) return <p className="p-6 text-lg">{cs.app.loading}</p>;
+  if (isLoading) return <p className="nis-panel p-4 text-nis-muted">{cs.app.loading}</p>;
   if (error || !data) {
     return (
-      <div className="p-6" role="alert">
-        <p className="text-lg text-red-800">
-          {cs.common.error}: {error?.message}
-        </p>
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          className="mt-2 rounded border-2 border-accent-600 px-3 py-1 font-semibold text-accent-700"
-        >
-          {cs.common.retry}
-        </button>
-      </div>
+      <ErrorState
+        message={`${cs.common.error}: ${error?.message ?? ""}`}
+        retryLabel={cs.common.retry}
+        onRetry={() => void refetch()}
+      />
     );
   }
 
+  // previous / next scheduled date (ISO strings compare lexicographically)
+  const prev = [...dates].reverse().find((d) => d.date < data.date)?.date;
+  const next = dates.find((d) => d.date > data.date)?.date;
+
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4">
-      <p>
-        <Link className="text-accent-700 underline" to="/">
+    <div className="space-y-3">
+      <SectionHeader icon="users" title={`MDT · ${cs.day.title(weekdayShort(data.date), formatDayMonth(data.date))}`}>
+        <DateNav
+          label={cs.day.title(weekdayShort(data.date), formatDayMonth(data.date))}
+          prevLabel={cs.day.prev}
+          nextLabel={cs.day.next}
+          onPrev={prev ? () => navigate(`/dny/${prev}`) : undefined}
+          onNext={next ? () => navigate(`/dny/${next}`) : undefined}
+        />
+        <HeaderDivider />
+        <ButtonLink to="/" icon="chevronLeft">
           {cs.day.back}
-        </Link>
-      </p>
-      <h1 className="text-3xl font-bold">{cs.day.title(weekdayShort(data.date), formatDayMonth(data.date))}</h1>
-      {data.meetings.length === 0 && <p className="text-lg">{cs.day.noMeetings}</p>}
+        </ButtonLink>
+      </SectionHeader>
+
+      {data.readiness && data.reason && (
+        <div className="nis-panel px-3 py-2">
+          <ReadinessBadge state={data.readiness} reason={data.reason} />
+        </div>
+      )}
+
+      {data.meetings.length === 0 && <p className="nis-panel nis-hatch px-3 py-6 text-center">{cs.day.noMeetings}</p>}
 
       {data.meetings.map((m) => (
-        <section key={m.id} id={m.id} className="rounded-xl border border-slate-300 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-2xl font-bold">
-              {m.time} {m.label}
-            </h2>
-            <Link
-              to={`/pridat?meeting=${encodeURIComponent(m.id)}&group=${encodeURIComponent(m.eligible_groups[0] ?? "")}`}
-              className="rounded-lg border-2 border-accent-600 px-3 py-1 font-semibold text-accent-700 hover:bg-accent-50"
-            >
-              {cs.day.addToMeeting}
-            </Link>
-          </div>
-          <div className="mt-1">
-            <ReadinessLabel state={m.readiness} reason={m.reason} />
-          </div>
-
+        <Panel
+          key={m.id}
+          id={m.id}
+          title={
+            <>
+              <span className="text-accent-600">{m.time}</span> {m.label}
+            </>
+          }
+          bodyClassName={m.cases.length ? "" : "p-3"}
+          actions={
+            <>
+              <ReadinessBadge state={m.readiness} reason={m.reason} />
+              <ButtonLink
+                to={`/pridat?meeting=${encodeURIComponent(m.id)}&group=${encodeURIComponent(m.eligible_groups[0] ?? "")}`}
+                icon="userPlus"
+              >
+                {cs.day.addToMeeting}
+              </ButtonLink>
+            </>
+          }
+        >
           {m.cases.length === 0 ? (
-            <p className="mt-3 text-slate-700">{cs.day.noPatients}</p>
+            <p className="text-nis-muted">{cs.day.noPatients}</p>
           ) : (
-            <table className="mt-3 w-full text-left">
+            <DataTable>
               <thead>
-                <tr className="border-b border-slate-300 text-sm text-slate-600">
-                  <th className="py-1 pr-3">{cs.day.patient}</th>
-                  <th className="py-1 pr-3">{cs.day.diagnosis}</th>
-                  <th className="py-1">{cs.day.status}</th>
+                <tr>
+                  <th>{cs.day.patient}</th>
+                  <th>{cs.day.diagnosis}</th>
+                  <th>{cs.day.reason}</th>
+                  <th className="w-px text-right">{cs.day.status}</th>
+                  <th className="w-px">
+                    <span className="sr-only">{cs.day.open}</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {m.cases.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100">
-                    <td className="py-2 pr-3">
+                  <tr key={c.id} className={READINESS_ROW[c.readiness]} data-readiness={c.readiness}>
+                    <td className="!align-middle">
                       <Link
                         to={`/cases/${c.id}`}
                         title={`${cs.header.pseudonym}: ${c.patient_id}`}
-                        className="font-semibold text-accent-700 underline"
+                        className="text-base font-bold text-accent-600 hover:underline"
                       >
                         {c.display_name}
                       </Link>
                     </td>
-                    <td className="py-2 pr-3">{c.diagnosis ?? cs.common.unknown}</td>
-                    <td className="py-2">
-                      <ReadinessLabel state={c.readiness} reason={c.reason} />
+                    <td className="!align-middle">{c.diagnosis ?? cs.common.unknown}</td>
+                    <td className="!align-middle">{c.reason}</td>
+                    <td className="whitespace-nowrap text-right !align-middle">
+                      <ReadinessTag state={c.readiness} />
+                    </td>
+                    <td className="!align-middle">
+                      <Link
+                        to={`/cases/${c.id}`}
+                        tabIndex={-1}
+                        aria-hidden="true"
+                        className="flex text-accent-600 hover:text-accent-700"
+                      >
+                        <Icon name="chevronRight" />
+                      </Link>
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </DataTable>
           )}
-        </section>
+        </Panel>
       ))}
     </div>
   );

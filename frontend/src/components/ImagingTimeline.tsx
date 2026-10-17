@@ -2,6 +2,7 @@ import { cs } from "../i18n/cs";
 import type { TimelineEntry } from "../services/api-types";
 import AvailabilityChip from "./AvailabilityChip";
 import { formatDate, regionsText } from "./format";
+import { Icon, Panel } from "./ui";
 
 function StudyCard({
   entry,
@@ -13,26 +14,27 @@ function StudyCard({
   const referenced = entry.kind === "referenced";
   return (
     <div
-      className={`w-56 shrink-0 rounded-lg bg-white p-3 ${
-        referenced ? "border-2 border-dashed border-slate-500" : "border-2 border-solid border-slate-700"
+      className={`w-56 shrink-0 rounded-nis p-2.5 ${
+        referenced ? "border border-dashed border-nis-ink bg-[#f7f9fb]" : "border border-nis-line bg-white"
       }`}
     >
-      <div className="text-sm font-semibold text-slate-600">
-        {formatDate(entry.date)} · {cs.timelineKind[entry.kind]}
+      <div className="flex items-baseline justify-between gap-2 text-sm">
+        <span className="font-bold text-accent-600">{formatDate(entry.date)}</span>
+        <span className="text-xs text-nis-muted">{cs.timelineKind[entry.kind]}</span>
       </div>
-      <div className="text-lg font-bold">
-        {entry.modality ?? cs.common.none}{" "}
-        <span className="font-normal">{regionsText(entry.regions)}</span>
+      <div className="mt-0.5 font-bold text-nis-text">
+        {entry.modality ?? cs.common.none} <span className="font-normal">{regionsText(entry.regions)}</span>
       </div>
-      <p className="my-1 line-clamp-2 text-sm text-slate-800">{entry.label}</p>
+      <p className="my-1 line-clamp-2 text-sm text-nis-ink">{entry.label}</p>
       <div className="flex flex-wrap items-center gap-2">
         {entry.availability && <AvailabilityChip availability={entry.availability} />}
         {entry.doc_id && (
           <button
             type="button"
             onClick={() => onOpenSource(entry.doc_id as string, null)}
-            className="text-sm font-semibold text-accent-700 underline underline-offset-2 hover:text-accent-600"
+            className="inline-flex items-center gap-1 text-sm font-medium text-accent-600 hover:underline"
           >
+            <Icon name="document" size="1.1em" />
             {cs.timeline.openReport}
           </button>
         )}
@@ -45,17 +47,15 @@ function Marker({ entry }: { entry: TimelineEntry }) {
   const mdt = entry.kind === "mdt";
   return (
     <div
-      className={`w-44 shrink-0 rounded-md px-3 py-2 ${
-        mdt
-          ? "border-2 border-accent-600 bg-accent-600 text-white"
-          : "border-l-8 border-accent-500 bg-accent-50 text-slate-900"
+      className={`w-44 shrink-0 rounded-nis px-2.5 py-2 text-sm ${
+        mdt ? "bg-nis-slate text-white" : "border-l-4 border-accent-600 bg-nis-info text-nis-text"
       }`}
     >
-      <div className="text-sm font-semibold">
-        {mdt ? "⚑ " : "▮ "}
+      <div className="flex items-center gap-1.5 font-bold">
+        <Icon name={mdt ? "flag" : "pulse"} size="1.1em" />
         {formatDate(entry.date)} · {cs.timelineKind[entry.kind]}
       </div>
-      <div className="text-sm">{entry.label}</div>
+      <div className="mt-0.5">{entry.label}</div>
     </div>
   );
 }
@@ -71,22 +71,23 @@ export default function ImagingTimeline({
   const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date));
 
   return (
-    <section className="rounded-xl border border-slate-300 bg-white p-4 shadow-sm" aria-labelledby="timeline-title">
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="timeline-title" className="text-xl font-bold">
-          {cs.timeline.title}
-        </h2>
-        <span className="text-sm text-slate-600">
+    <Panel
+      id="timeline"
+      icon="scan"
+      title={cs.timeline.title}
+      actions={
+        <span className="text-xs text-nis-muted">
           {cs.timeline.legendSolid} · {cs.timeline.legendDashed}
         </span>
-      </div>
+      }
+    >
       {sorted.length === 0 ? (
-        <p className="text-slate-600">{cs.timeline.empty}</p>
+        <p className="text-nis-muted">{cs.timeline.empty}</p>
       ) : (
-        <div className="overflow-x-auto pb-2">
-          <ol className="relative flex w-max items-center gap-4 px-1 py-2">
+        <div className="overflow-x-auto pb-1">
+          <ol className="relative flex w-max items-center gap-3 px-1 py-1">
             {/* axis line behind the cards */}
-            <div className="absolute inset-x-0 top-1/2 -z-0 h-0.5 bg-slate-300" aria-hidden="true" />
+            <div className="absolute inset-x-0 top-1/2 h-px bg-nis-line" aria-hidden="true" />
             {sorted.map((entry, i) => (
               <li key={`${entry.kind}-${entry.date}-${i}`} className="relative z-10">
                 {entry.kind === "study" || entry.kind === "referenced" ? (
@@ -99,6 +100,6 @@ export default function ImagingTimeline({
           </ol>
         </div>
       )}
-    </section>
+    </Panel>
   );
 }

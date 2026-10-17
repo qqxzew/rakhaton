@@ -3,21 +3,25 @@ import type { ReadinessCounts, ReadinessState } from "../services/api-types";
 import { ReadinessIcon } from "./ReadinessBadge";
 
 const TEXT: Record<ReadinessState, string> = {
-  ready: "text-green-900",
-  attention: "text-amber-900",
-  not_ready: "text-red-900",
+  ready: "text-nis-green",
+  attention: "text-[#9a6b00]",
+  not_ready: "text-nis-red",
 };
 
 /** Icon + label (+ optional reason) on one line; state is never conveyed by color alone. */
 export function ReadinessLabel({ state, reason }: { state: ReadinessState; reason?: string | null }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 ${TEXT[state]}`} data-readiness={state}>
-      <ReadinessIcon state={state} />
-      <span className="font-semibold">{cs.readiness[state]}</span>
+    <span className="inline-flex items-center gap-1.5" data-readiness={state}>
+      <span className={`inline-flex items-center gap-1 ${TEXT[state]}`}>
+        <ReadinessIcon state={state} />
+        <span className="font-medium">{cs.readiness[state]}</span>
+      </span>
       {reason ? (
         <>
-          <span aria-hidden="true">–</span>
-          <span>{reason}</span>
+          <span aria-hidden="true" className="text-nis-muted">
+            –
+          </span>
+          <span className="text-nis-text">{reason}</span>
         </>
       ) : null}
     </span>

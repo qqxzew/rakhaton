@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { cs } from "../i18n/cs";
 import {
@@ -9,6 +9,7 @@ import {
 } from "../services/api";
 import type { PatientSearchResult } from "../services/api-types";
 import { formatDate } from "../components/format";
+import { Button, FieldLabel, Icon, SectionHeader, Tag } from "../components/ui";
 
 type Errors = Partial<Record<"patient" | "group" | "meeting", string>>;
 
@@ -17,7 +18,7 @@ export default function AddPatient() {
   const [params] = useSearchParams();
   const prefilledMeeting = params.get("meeting") ?? "";
 
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(params.get("q") ?? "");
   const [debounced, setDebounced] = useState("");
   const [patient, setPatient] = useState<PatientSearchResult | null>(null);
   const [displayName, setDisplayName] = useState("");
@@ -67,74 +68,76 @@ export default function AddPatient() {
   };
 
   return (
-    <form onSubmit={onSubmit} className="mx-auto max-w-4xl space-y-6 p-4" noValidate>
-      <h1 className="text-3xl font-bold">{cs.addPatient.title}</h1>
+    <form onSubmit={onSubmit} className="max-w-4xl space-y-3" noValidate>
+      <SectionHeader icon="userPlus" title={cs.addPatient.title} />
 
-      <fieldset className="space-y-2 rounded-xl border border-slate-300 bg-white p-4">
-        <legend className="px-1 text-xl font-bold">{cs.addPatient.patientStep}</legend>
-        <label className="block font-semibold" htmlFor="patient-search">
-          {cs.addPatient.searchLabel}
-        </label>
-        <input
-          id="patient-search"
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={cs.addPatient.searchPlaceholder}
-          className="w-full rounded-lg border-2 border-slate-400 px-3 py-2"
-        />
-        {search.isLoading && <p>{cs.app.loading}</p>}
+      <Step legend={cs.addPatient.patientStep}>
+        <FieldLabel htmlFor="patient-search">{cs.addPatient.searchLabel}</FieldLabel>
+        <div className="relative">
+          <Icon name="search" className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-nis-icon" />
+          <input
+            id="patient-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={cs.addPatient.searchPlaceholder}
+            className="nis-input pl-8"
+          />
+        </div>
+        {search.isLoading && <p className="text-nis-muted">{cs.app.loading}</p>}
         {search.error && (
-          <p role="alert" className="text-red-800">
+          <p role="alert" className="text-nis-red">
             {cs.common.error}: {search.error.message}
           </p>
         )}
-        {search.data && search.data.length === 0 && <p>{cs.addPatient.noResults}</p>}
-        <ul className="max-h-64 space-y-1 overflow-auto">
-          {search.data?.map((p) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                onClick={() => pickPatient(p)}
-                aria-pressed={patient?.id === p.id}
-                className="w-full rounded-lg border-2 border-transparent px-2 py-1.5 text-left hover:bg-accent-50 aria-pressed:border-accent-600 aria-pressed:bg-accent-100"
-              >
-                <span className="font-semibold">{p.id}</span>
-                <span className="ml-2">
-                  {p.sex}, {p.age_band}
-                </span>
-                <span className="ml-2 text-slate-700">
-                  {p.diagnoses.map((d) => d.code).join(", ") || cs.common.unknown}
-                </span>
-                {p.has_imaging && <Badge text={cs.addPatient.hasImaging} />}
-                {p.has_documents && <Badge text={cs.addPatient.hasDocuments} />}
-              </button>
-            </li>
-          ))}
-        </ul>
+        {search.data && search.data.length === 0 && <p className="text-nis-muted">{cs.addPatient.noResults}</p>}
+        {search.data && search.data.length > 0 && (
+          <ul className="max-h-64 overflow-auto rounded-nis border border-nis-line">
+            {search.data.map((p) => (
+              <li key={p.id} className="border-b border-nis-line last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => pickPatient(p)}
+                  aria-pressed={patient?.id === p.id}
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-l-[3px] border-transparent px-2.5 py-2 text-left hover:bg-accent-50 aria-pressed:border-accent-600 aria-pressed:bg-accent-50"
+                >
+                  <span className="font-bold text-accent-600">{p.id}</span>
+                  <span className="text-nis-ink">
+                    {p.sex}, {p.age_band}
+                  </span>
+                  <span className="text-nis-text">{p.diagnoses.map((d) => d.code).join(", ") || cs.common.unknown}</span>
+                  <span className="ml-auto flex gap-1">
+                    {p.has_imaging && <Tag tone="teal">{cs.addPatient.hasImaging}</Tag>}
+                    {p.has_documents && <Tag tone="gray">{cs.addPatient.hasDocuments}</Tag>}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {patient && (
-          <p className="font-semibold">
-            {cs.addPatient.selected}: {patient.id}
+          <p className="flex items-center gap-2 font-medium">
+            <Icon name="check" className="text-nis-green" />
+            {cs.addPatient.selected}: <span className="font-bold text-accent-600">{patient.id}</span>
           </p>
         )}
         {errors.patient && <FieldError text={errors.patient} />}
 
-        <label className="mt-2 block font-semibold" htmlFor="display-name">
-          {cs.addPatient.displayName}
-        </label>
-        <input
-          id="display-name"
-          type="text"
-          maxLength={200}
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          className="w-full rounded-lg border-2 border-slate-400 px-3 py-2"
-        />
-        <p className="text-sm text-slate-600">{cs.addPatient.displayNameHint}</p>
-      </fieldset>
+        <div className="pt-2">
+          <FieldLabel htmlFor="display-name">{cs.addPatient.displayName}</FieldLabel>
+          <input
+            id="display-name"
+            type="text"
+            maxLength={200}
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            className="nis-input mt-1"
+          />
+          <p className="mt-1 text-sm text-nis-muted">{cs.addPatient.displayNameHint}</p>
+        </div>
+      </Step>
 
-      <fieldset className="space-y-2 rounded-xl border border-slate-300 bg-white p-4">
-        <legend className="px-1 text-xl font-bold">{cs.addPatient.groupStep}</legend>
+      <Step legend={cs.addPatient.groupStep}>
         <select
           aria-label={cs.addPatient.groupStep}
           value={group}
@@ -142,7 +145,7 @@ export default function AddPatient() {
             setGroup(e.target.value);
             setMeetingId("");
           }}
-          className="w-full rounded-lg border-2 border-slate-400 px-3 py-2"
+          className="nis-input"
         >
           <option value="">—</option>
           {groups.data?.map((g) => (
@@ -152,62 +155,79 @@ export default function AddPatient() {
           ))}
         </select>
         {errors.group && <FieldError text={errors.group} />}
-      </fieldset>
+      </Step>
 
-      <fieldset className="space-y-2 rounded-xl border border-slate-300 bg-white p-4">
-        <legend className="px-1 text-xl font-bold">{cs.addPatient.meetingStep}</legend>
-        {eligible.isLoading && <p>{cs.app.loading}</p>}
+      <Step legend={cs.addPatient.meetingStep}>
+        {eligible.isLoading && <p className="text-nis-muted">{cs.app.loading}</p>}
         {eligible.error && (
-          <p role="alert" className="text-red-800">
+          <p role="alert" className="text-nis-red">
             {cs.common.error}: {eligible.error.message}
           </p>
         )}
-        {eligible.data && eligible.data.length === 0 && <p>{cs.addPatient.noMeetings}</p>}
-        <div className="max-h-64 space-y-1 overflow-auto">
-          {eligible.data?.map((m) => (
-            <label key={m.id} className="flex items-center gap-2 rounded-lg px-2 py-1 hover:bg-accent-50">
-              <input
-                type="radio"
-                name="meeting"
-                value={m.id}
-                checked={meetingId === m.id}
-                onChange={() => {
-                  setMeetingId(m.id);
-                  setErrors((e) => ({ ...e, meeting: undefined }));
-                }}
-              />
-              <span>
-                {formatDate(m.date)} {m.time} – {m.label}
-              </span>
-            </label>
-          ))}
-        </div>
+        {eligible.data && eligible.data.length === 0 && (
+          <p className="nis-row-attention rounded-nis px-2.5 py-2">{cs.addPatient.noMeetings}</p>
+        )}
+        {eligible.data && eligible.data.length > 0 && (
+          <div className="max-h-64 overflow-auto rounded-nis border border-nis-line">
+            {eligible.data.map((m) => (
+              <label
+                key={m.id}
+                className={`flex cursor-pointer items-center gap-2.5 border-b border-nis-line px-2.5 py-2 last:border-b-0 hover:bg-accent-50 ${
+                  meetingId === m.id ? "bg-accent-50" : ""
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="meeting"
+                  value={m.id}
+                  checked={meetingId === m.id}
+                  className="accent-accent-600"
+                  onChange={() => {
+                    setMeetingId(m.id);
+                    setErrors((e) => ({ ...e, meeting: undefined }));
+                  }}
+                />
+                <span className="font-bold text-accent-600">
+                  {formatDate(m.date)} {m.time}
+                </span>
+                <span>– {m.label}</span>
+              </label>
+            ))}
+          </div>
+        )}
         {errors.meeting && <FieldError text={errors.meeting} />}
-      </fieldset>
+      </Step>
 
       {create.isError && (
-        <p role="alert" className="font-semibold text-red-800">
+        <p role="alert" className="nis-panel nis-row-danger px-3 py-2 font-medium">
           {cs.common.error}: {create.error.message}
         </p>
       )}
-      <button
-        type="submit"
-        disabled={create.isPending}
-        className="rounded-lg bg-accent-600 px-5 py-2 text-lg font-semibold text-white hover:bg-accent-700 disabled:opacity-60"
-      >
-        {create.isPending ? cs.addPatient.submitting : cs.addPatient.submit}
-      </button>
+      <div className="flex justify-end">
+        <Button type="submit" variant="primary" icon="userPlus" disabled={create.isPending} className="h-9 px-5">
+          {create.isPending ? cs.addPatient.submitting : cs.addPatient.submit}
+        </Button>
+      </div>
     </form>
   );
 }
 
-function Badge({ text }: { text: string }) {
-  return <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-sm text-slate-700">{text}</span>;
+/** Form step as an NIS panel; the float keeps the legend inside the panel instead of on its border. */
+function Step({ legend, children }: { legend: string; children: ReactNode }) {
+  return (
+    <fieldset className="nis-panel">
+      <legend className="float-left w-full border-b border-nis-line px-3 py-2.5 text-lg font-bold text-nis-text">
+        {legend}
+      </legend>
+      <div className="clear-both space-y-2 p-3">{children}</div>
+    </fieldset>
+  );
 }
 
 function FieldError({ text }: { text: string }) {
   return (
-    <p role="alert" className="font-semibold text-red-800">
+    <p role="alert" className="flex items-center gap-1.5 font-medium text-nis-red">
+      <Icon name="crossCircle" />
       {text}
     </p>
   );
