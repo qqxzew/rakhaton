@@ -224,6 +224,9 @@ class RequiredItem(BaseModel):
     # Set by FhirHospitalAdapter: how the holding hospital was found and its ImagingStudy there.
     located_by: str | None = None
     provider_study_ref: str | None = None
+    # Where the availability answer came from: "dicom-cfind" (asked the simulated PACS), "fhir-search" or
+    # "dataset-flag" (fallback when the PACS did not answer). None for adapters that do not report it.
+    availability_source: str | None = None
     # Set for items proposed by Vector Search (undated reference): the similar report and its cosine score.
     proposed_report_id: str | None = None
     similarity_score: float | None = None

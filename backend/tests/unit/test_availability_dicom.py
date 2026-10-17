@@ -16,7 +16,14 @@ from app.exchange.dicom import (
     parse_dicom_date,
     parse_matches,
 )
-from app.pipeline.availability_dicom import LOCATED_BY, DicomAvailabilityAdapter
+from app.pipeline.availability import AvailabilityAdapter, DatasetFlagAdapter, default_adapter
+from app.pipeline.availability_dicom import (
+    LOCATED_BY,
+    SOURCE_CFIND,
+    SOURCE_FHIR,
+    SOURCE_FLAG,
+    DicomAvailabilityAdapter,
+)
 from app.pipeline.schemas import Evidence, PartialDate, PriorReference, RequiredItem, Study
 
 PATIENT = "PAC-TEST-0001"
@@ -64,8 +71,33 @@ def item(site_id: str = "unknown") -> RequiredItem:
         state="missing", holding_site_id=site_id, holding_site_name="Neznámé pracoviště", note="Uvedeno v nálezu")
 
 
-def adapter(client: FakeClient) -> DicomAvailabilityAdapter:
-    return DicomAvailabilityAdapter(client=client, pacs=PACS)
+def adapter(client: FakeClient, fallback: AvailabilityAdapter | None = None) -> DicomAvailabilityAdapter:
+    return DicomAvailabilityAdapter(client=client, pacs=PACS, fallback=fallback, fhir_fallback=False)
+
+
+class BoomClient(CFindClient):
+    """Fails with something that is not a DicomError (IRIS Native API raises its own types)."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def find(self, ae, patient_id, window, modality):
+        self.calls += 1
+        raise ConnectionRefusedError("orthanc is down")
+
+
+class FakeFhirFallback(AvailabilityAdapter):
+    def __init__(self):
+        self.registered: list[str] = []
+
+    def check(self, study, reference):
+        if reference is not None:
+            self.registered.append(reference.id)
+        return "not_found"
+
+    def enrich(self, items):
+        return [i.model_copy(update={"holding_site_id": "fnm", "holding_site_name": "FNM", "located_by": "fhir-search"})
+                for i in items], []
 
 
 def test_internal_study_found_at_motol_is_available():
@@ -105,7 +137,8 @@ def test_reference_without_study_is_not_found_and_holder_is_located_at_partner_a
     items, issues = a.enrich([item()])
     assert issues == []
     assert items[0].holding_site_id == "fnm" and items[0].located_by == LOCATED_BY
-    assert items[0].provider_study_ref == "dicom://FNM/SIM-FNM-1"
+    assert items[0].provider_study_ref is None  # the FHIR ImagingStudy URL is looked up only with the IRIS backend
+    assert items[0].availability_source == SOURCE_CFIND
     assert [c[0] for c in client.calls] == ["NNH", "HOMOLKA", "FNM"]  # Motol is never asked for partner studies
     assert client.calls[0][2] == (date(2025, 3, 9), date(2025, 3, 15))
 
@@ -131,7 +164,7 @@ def test_all_pacs_unreachable_claims_nothing():
     a = adapter(FakeClient(down={"NNH", "HOMOLKA", "FNM"}))
     a.check(None, reference())
     items, issues = a.enrich([item()])
-    assert items[0] == item()
+    assert items[0] == item().model_copy(update={"availability_source": SOURCE_FLAG})
     assert len(issues) == 1 and "nebyly dostupné" in issues[0].text
 
 
@@ -149,3 +182,106 @@ def test_parse_matches_and_helpers():
     assert parse_dicom_date("2025031") is None and parse_dicom_date("20251341") is None
     assert date_range((date(2025, 3, 9), date(2025, 3, 15))) == "20250309-20250315"
     assert date_range(None) == ""
+
+
+def _settings(monkeypatch, adapter_name: str | None, backend: str | None):
+    from app.config import get_settings
+
+    for key, value in (("AVAILABILITY_ADAPTER", adapter_name), ("FHIR_BACKEND", backend)):
+        if value is None:
+            monkeypatch.delenv(key, raising=False)
+        else:
+            monkeypatch.setenv(key, value)
+    get_settings.cache_clear()
+    return get_settings()
+
+
+def test_dicom_is_the_default_with_the_iris_backend(monkeypatch):
+    try:
+        assert _settings(monkeypatch, None, None).availability_adapter == "dicom"
+        assert isinstance(default_adapter(), DicomAvailabilityAdapter)
+        assert _settings(monkeypatch, None, "local").availability_adapter == "dataset_flag"
+        assert isinstance(default_adapter(), DatasetFlagAdapter)
+        assert _settings(monkeypatch, "fhir_hospitals", "iris").availability_adapter == "fhir_hospitals"
+    finally:
+        monkeypatch.undo()
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+
+
+def test_availability_source_is_recorded_on_the_items():
+    client = FakeClient({"MOTOL": [match("MOTOL", "CT", date(2025, 1, 10))]})
+    a = adapter(client)
+    assert a.check(study(), None) == "available"
+    internal = RequiredItem(id="I1", rule_ids=["R2"], reasons=["x"], modality="CT", study_id="STU-TEST",
+                            availability="available", state="ok")
+    (enriched,), _ = a.enrich([internal])
+    assert enriched.availability_source == SOURCE_CFIND
+
+
+def test_cfind_error_of_any_type_falls_back_to_the_flag_and_does_not_ask_again():
+    client = BoomClient()
+    a = adapter(client)
+    assert a.check(study("yes"), None) == "available"
+    assert a.check(study("no", day=date(2025, 2, 1)), None) == "not_in_pacs"
+    assert client.calls == 1  # the PACS is marked down for the rest of the run
+    internal = RequiredItem(id="I1", rule_ids=["R2"], reasons=["x"], modality="CT", study_id="STU-TEST",
+                            availability="available", state="ok")
+    (enriched,), _ = a.enrich([internal])
+    assert enriched.availability_source == SOURCE_FLAG
+
+
+def test_partner_pacs_down_falls_back_to_the_fhir_hospitals():
+    fallback = FakeFhirFallback()
+    a = adapter(BoomClient(), fallback)
+    assert a.check(None, reference()) == "not_found"
+    assert fallback.registered == ["REF-1"]
+    items, issues = a.enrich([item()])
+    assert items[0].holding_site_id == "fnm" and items[0].availability_source == SOURCE_FHIR
+    assert items[0].located_by == "fhir-search"
+    assert any("nebyly dostupné" in i.text for i in issues)
+
+
+def test_partner_pacs_down_and_nobody_answers_keeps_the_item_unclaimed():
+    class Empty(FakeFhirFallback):
+        def enrich(self, items):
+            return items, []
+
+    a = adapter(BoomClient(), Empty())
+    a.check(None, reference())
+    items, _ = a.enrich([item()])
+    assert items[0].located_by is None and items[0].availability_source == SOURCE_FLAG
+    assert items[0].holding_site_id == "unknown"
+
+
+def test_a_failing_fallback_never_breaks_enrich():
+    class Broken(FakeFhirFallback):
+        def enrich(self, items):
+            raise RuntimeError("fhir down")
+
+    a = adapter(BoomClient(), Broken())
+    a.check(None, reference())
+    items, issues = a.enrich([item()])
+    assert items[0].located_by is None and len(issues) == 1
+
+
+def test_health_reports_pacs_status(monkeypatch):
+    from app.api import health
+
+    _settings(monkeypatch, "dataset_flag", "local")
+    try:
+        assert health._check_pacs()["status"] == "skipped"
+        _settings(monkeypatch, "dicom", "local")
+        monkeypatch.setattr(health, "_probe_orthanc", lambda rest: True)
+        monkeypatch.setattr(health, "_probe_cfind", lambda ae: True)
+        ok = health._check_pacs()
+        assert ok["status"] == "ok" and ok["cfind"] is True and set(ok["orthanc"]) == {"MOTOL", "NNH", "HOMOLKA", "FNM"}
+        monkeypatch.setattr(health, "_probe_orthanc", lambda rest: not rest.endswith("8052"))
+        degraded = health._check_pacs()
+        assert degraded["status"] == "error" and degraded["orthanc"]["NNH"] is False
+    finally:
+        monkeypatch.undo()
+        from app.config import get_settings
+
+        get_settings.cache_clear()

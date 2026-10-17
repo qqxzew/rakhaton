@@ -8,7 +8,11 @@ Objects are blank (no pixel data): PatientID = pseudonym, StudyDate, Modality, A
 StudyDescription "Simulovaná studie". Stored through the Orthanc REST API; rerunning is idempotent.
 Output is counts only.
 
-    uv run python scripts/seed_dicom.py [--dry-run]
+Motol patients: those of data/demo_patients.json, data/cloud_patients.json (if present), the saved review
+results (data/review/*.json) and any `--patients` ids; their studies are read from the FHIR store, so the
+seeding does not depend on a stale review snapshot.
+
+    uv run python scripts/seed_dicom.py [--dry-run] [--patients PAC-... ...]
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import io
+import json
 import sys
 from collections import Counter
 
@@ -24,6 +29,7 @@ from pydicom.dataset import Dataset, FileMetaDataset
 from pydicom.filewriter import dcmwrite
 from pydicom.uid import ExplicitVRLittleEndian, generate_uid
 
+from app.config import get_settings
 from app.exchange.dicom import PacsNode, nodes
 from app.exchange.hospitals import (
     DICOM_MODALITY,
@@ -33,6 +39,8 @@ from app.exchange.hospitals import (
     pipeline_modality,
     search_bundle,
 )
+from app.fhir_store.factory import get_store
+from app.pipeline.timeline import build_studies
 from scripts.seed_hospitals import result_files
 
 SECONDARY_CAPTURE = "1.2.840.10008.5.1.4.1.1.7"
@@ -70,15 +78,33 @@ def build_dicom(patient_id: str, study_date: str, modality: str, accession: str,
     return buf.getvalue()
 
 
-def collect_motol() -> list[tuple[str, str, str, str]]:
-    """(patient, YYYYMMDD, DICOM modality, accession) of internal studies with PACS flag yes."""
+def patient_ids(extra: list[str] | None = None) -> list[str]:
+    """Demo, cloud and review patients plus explicit ids, in a stable order without duplicates."""
+    data_dir = get_settings().data_dir
+    ids: list[str] = list(extra or [])
+    for name in ("demo_patients.json", "cloud_patients.json"):
+        path = data_dir / name
+        if path.exists():
+            ids += [p["patient_id"] for p in json.loads(path.read_text(encoding="utf-8")).get("patients", [])]
+    ids += [r.patient_id for r in result_files()]
+    return list(dict.fromkeys(ids))
+
+
+def collect_motol(ids: list[str]) -> tuple[list[tuple[str, str, str, str]], Counter]:
+    """(patient, YYYYMMDD, DICOM modality, accession) of internal studies with PACS flag yes, and what was skipped."""
+    fhir = get_store()
     out: dict[str, tuple[str, str, str, str]] = {}
-    for result in result_files():
-        for study in result.timeline.studies:
+    skipped: Counter = Counter()
+    for pid in ids:
+        for study in build_studies(fhir, pid)[0]:
+            if study.source != "internal":
+                continue
             code = DICOM_MODALITY.get(study.modality)
-            if study.source == "internal" and study.pacs_flag == "yes" and code:
+            if study.pacs_flag == "yes" and code:
                 out[study.id] = (study.patient_id, f"{study.date:%Y%m%d}", code, study.id)
-    return list(out.values())
+            else:
+                skipped[study.pacs_flag if code else "no-dicom-modality"] += 1
+    return list(out.values()), skipped
 
 
 def collect_hospitals() -> dict[str, list[tuple[str, str, str, str]]]:
@@ -117,18 +143,18 @@ def study_count(client: httpx.Client, node: PacsNode) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--patients", nargs="*", default=[], help="extra patient ids to seed at MOTOL")
     args = parser.parse_args(argv)
 
     pacs = nodes()
-    plan: dict[str, list[tuple[str, str, str, str]]] = {"motol": collect_motol(), **collect_hospitals()}
-    skipped = Counter()
-    for result in result_files():
-        for study in result.timeline.studies:
-            if study.source == "internal" and study.pacs_flag != "yes":
-                skipped[study.pacs_flag] += 1
+    ids = patient_ids(args.patients)
+    motol, skipped = collect_motol(ids)
+    plan: dict[str, list[tuple[str, str, str, str]]] = {"motol": motol, **collect_hospitals()}
+    print(f"Patients covered at MOTOL: {len(ids)}")
     for node_id, rows in plan.items():
         print(f"{pacs[node_id].ae:8s} planned studies: {len(rows)}")
-    print(f"Motol studies not stored on purpose: flag no={skipped['no']}, unknown={skipped['unknown']}")
+    print(f"Motol studies not stored on purpose: flag no={skipped['no']}, unknown={skipped['unknown']}, "
+          f"other modality={skipped['no-dicom-modality']}")
     if args.dry_run:
         return 0
     with httpx.Client(timeout=60) as client:

@@ -39,10 +39,12 @@ class Settings:
     iris_user: str = field(default="", repr=False)
     iris_password: str = field(default="", repr=False)
     demo_today: date | None = None
+    # dicom (C-FIND against the simulated PACS = Orthanc, falls back per item to the FHIR hospitals / dataset flag),
     # fhir_hospitals (query the simulated hospital FHIR endpoints) or dataset_flag (Motol PACS flag only)
-    availability_adapter: str = "fhir_hospitals"
+    availability_adapter: str = "dicom"
     # iris (C-FIND runs in the IRIS production PACSDICOM) or pynetdicom (fallback), used by AVAILABILITY_ADAPTER=dicom
     dicom_client: str = "iris"
+
     @property
     def raw_dir(self) -> Path:
         return self.data_dir / "raw"
@@ -70,6 +72,7 @@ def _resolve_db_url(url: str) -> str:
 def get_settings() -> Settings:
     data_dir = _data_dir()
     demo_today = os.environ.get("DEMO_TODAY", "").strip()
+    fhir_backend = os.environ.get("FHIR_BACKEND", "").strip() or "iris"
     return Settings(
         data_dir=data_dir,
         app_db_url=_resolve_db_url(
@@ -79,12 +82,13 @@ def get_settings() -> Settings:
         llm_base_url=os.environ.get("LLM_BASE_URL", DEFAULT_LLM_BASE_URL),
         llm_model_extract=os.environ.get("LLM_MODEL_EXTRACT", "gpt-6-1-sol-dz-eu"),
         llm_model_fast=os.environ.get("LLM_MODEL_FAST", "gpt-6-luna-dz-eu"),
-        fhir_backend=os.environ.get("FHIR_BACKEND", "").strip() or "iris",
+        fhir_backend=fhir_backend,
         iris_fhir_base=os.environ.get("IRIS_FHIR_BASE", "").strip() or DEFAULT_IRIS_FHIR_BASE,
         iris_user=os.environ.get("IRIS_USER", ""),
         iris_password=os.environ.get("IRIS_PASSWORD", ""),
         demo_today=date.fromisoformat(demo_today) if demo_today else None,
-        availability_adapter=os.environ.get("AVAILABILITY_ADAPTER", "").strip() or "fhir_hospitals",
+        availability_adapter=os.environ.get("AVAILABILITY_ADAPTER", "").strip()
+        or ("dicom" if fhir_backend == "iris" else "dataset_flag"),
         dicom_client=os.environ.get("DICOM_CLIENT", "").strip() or "iris",
     )
 

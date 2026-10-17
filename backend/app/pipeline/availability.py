@@ -29,7 +29,7 @@ class DatasetFlagAdapter(AvailabilityAdapter):
 
 
 def default_adapter() -> AvailabilityAdapter:
-    """Adapter chosen by AVAILABILITY_ADAPTER (default fhir_hospitals; needs the IRIS FHIR backend)."""
+    """Adapter chosen by AVAILABILITY_ADAPTER (default dicom with the IRIS FHIR backend, else dataset_flag)."""
     from app.config import get_settings
 
     settings = get_settings()
