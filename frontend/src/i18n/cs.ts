@@ -28,6 +28,9 @@ export const cs = {
     empty: "Žádná naplánovaná MDT",
     meetings: (n: number) => `${n} MDT`,
     ariaDate: (weekday: string, date: string, readiness: string) => `${weekday} ${date}: ${readiness}`,
+    noPatients: "Bez pacientů",
+    moreDays: (n: number) => `Další dny bez pacientů (${n})`,
+    lessDays: "Skrýt další dny",
   },
   dashboard: {
     title: (from: string, to: string) => `Nejbližších 7 dní: ${from} – ${to}`,

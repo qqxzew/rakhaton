@@ -43,13 +43,15 @@ def planned_exam_to_service_request(exam: PlannedExam) -> Resource:
         "subject": _patient_ref(exam.patient_id),
         "code": {"text": "MDT"} if exam.kind == "mdt"
         else {"coding": [{"system": DCM, "code": exam.modality}], "text": exam.modality},
-        "bodySite": [{"text": region} for region in exam.regions],
         "reasonReference": [{"reference": _source_ref(exam.source_doc_id)}],
         "extension": [
             {"url": QUOTE_URL, "valueString": exam.evidence.quote},
             {"url": CONFIDENCE_URL, "valueDecimal": exam.evidence.confidence},
         ],
     }
+    # FHIR forbids empty arrays: an MDT plan or an unknown region has no bodySite.
+    if exam.regions:
+        resource["bodySite"] = [{"text": region} for region in exam.regions]
     if exam.date:
         resource["occurrenceDateTime"] = exam.date.isoformat()
     if exam.site_text:
