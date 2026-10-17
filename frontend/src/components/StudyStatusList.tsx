@@ -9,7 +9,7 @@ import { Button, Panel, Tag, type IconName, type TagTone } from "./ui";
 
 /** The three states a coordinator works with; the full pipeline detail stays in "Podrobnosti". */
 export type StudyStatus = "ready" | "awaiting" | "attention";
-type PrimaryAction = "approve" | "confirm" | "create" | null;
+type PrimaryAction = "approve" | "create" | null;
 
 const TONE: Record<StudyStatus, TagTone> = { ready: "green", awaiting: "blue", attention: "amber" };
 const ICON: Record<StudyStatus, IconName> = { ready: "check", awaiting: "mail", attention: "warning" };
@@ -41,7 +41,8 @@ export function studyStatus(item: RequiredItem): { status: StudyStatus; text: st
       text: cs.summary.confirmedBy(item.confirmation.actor, localFromUtc(item.confirmation.waived_at)),
       action: null,
     };
-  if (state && DONE.has(state)) return { status: "attention", text: cs.summary.deliveredConfirm(provider), action: "confirm" };
+  if (state && DONE.has(state))
+    return { status: "ready", text: cs.summary.autoVerified(provider, formatDateTime(req?.updated_at ?? "")), action: null };
   if (item.state === "ok") return { status: "ready", text: cs.summary.inPacs, action: null };
 
   const requested = (extra?: string) => {
@@ -155,19 +156,17 @@ function StudyRow({
   requestsAvailable: boolean;
   onShowRequest: (requestId: string) => void;
 }) {
-  const [dialog, setDialog] = useState<"approve" | "confirm" | null>(null);
+  const [dialog, setDialog] = useState(false);
   const [demo, setDemo] = useState(false);
   const [coordinator, setName] = useState(getCoordinator());
   const req = item.request;
 
   const create = useAction(() => requestsApi.createDrafts(caseId));
   const approve = useAction(() => requestsApi.approve(req!.id, coordinator.trim()));
-  const confirm = useAction(() => requestsApi.confirm(caseId, item.id, coordinator.trim()));
-  const active = dialog === "confirm" ? confirm : approve;
   const named = coordinator.trim().length >= 2;
   const close = () => {
-    setDialog(null);
-    active.reset();
+    setDialog(false);
+    approve.reset();
   };
 
   return (
@@ -187,13 +186,8 @@ function StudyRow({
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {action === "approve" && requestsAvailable && (
-            <Button variant="primary" icon="check" onClick={() => setDialog("approve")}>
+            <Button variant="primary" icon="check" onClick={() => setDialog(true)}>
               {cs.actions.approve}
-            </Button>
-          )}
-          {action === "confirm" && (
-            <Button variant="primary" icon="check" onClick={() => setDialog("confirm")}>
-              {cs.summary.confirm}
             </Button>
           )}
           {action === "create" && requestsAvailable && (
@@ -222,17 +216,17 @@ function StudyRow({
 
       {dialog && (
         <ActionDialog
-          title={dialog === "confirm" ? cs.summary.confirmTitle : `${cs.actions.approveTitle} ${req?.id ?? ""}`}
-          hint={dialog === "confirm" ? cs.summary.confirmHint : cs.actions.approveHint}
+          title={`${cs.actions.approveTitle} ${req?.id ?? ""}`}
+          hint={cs.actions.approveHint}
           simulated
-          submitLabel={dialog === "confirm" ? cs.summary.confirm : cs.actions.approve}
+          submitLabel={cs.actions.approve}
           canSubmit={named}
-          busy={active.isPending}
-          error={active.error?.message}
+          busy={approve.isPending}
+          error={approve.error?.message}
           onClose={close}
           onSubmit={() => {
             setCoordinator(coordinator);
-            active.mutate(undefined, { onSuccess: () => setDialog(null) });
+            approve.mutate(undefined, { onSuccess: () => setDialog(false) });
           }}
         >
           <CoordinatorField value={coordinator} onChange={setName} />
