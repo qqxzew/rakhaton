@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { cs } from "./i18n/cs";
 import { isMockMode } from "./services/api";
 import { MOCK_CASE_ID } from "./services/mock";
@@ -151,6 +151,7 @@ export default function App() {
             <Route path="/nemocnice" element={<Hospitals />} />
             <Route path="/integrace" element={<Integration />} />
             <Route path="/statistiky" element={<Stats />} />
+            <Route path="/stats" element={<Navigate to="/statistiky" replace />} />
             <Route path="*" element={<p className="nis-panel p-4">{cs.app.notFound}</p>} />
           </Routes>
         </main>

@@ -39,6 +39,12 @@ def _rows(conn, table: str) -> list[dict]:
             for r in res.fetchall()]
 
 
+def _jsonable(value):
+    if isinstance(value, bytes | bytearray | memoryview):
+        return f"<{len(bytes(value))} bytes>"
+    return str(value)
+
+
 def backup_and_reset(engine) -> dict:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     out = get_settings().data_dir / "backup"
@@ -53,7 +59,8 @@ def backup_and_reset(engine) -> dict:
                 dump[t] = _rows(conn, t)
             except Exception as exc:  # noqa: BLE001 - a missing table is fine
                 dump[t] = [f"unreadable: {type(exc).__name__}"]
-        (out / f"demo_state_{stamp}.json").write_text(json.dumps(dump, ensure_ascii=False, indent=1), encoding="utf-8")
+        (out / f"demo_state_{stamp}.json").write_text(
+            json.dumps(dump, ensure_ascii=False, indent=1, default=_jsonable), encoding="utf-8")
         for t in APP_TABLES:
             counts[t] = conn.execute(text(f"DELETE FROM {t}")).rowcount
         counts["meeting(ad hoc)"] = conn.execute(text(

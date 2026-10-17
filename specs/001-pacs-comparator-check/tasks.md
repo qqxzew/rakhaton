@@ -52,7 +52,7 @@
 - [X] T074 [IRIS-A2] `backend/scripts/load_iris.py`: load all 1,830 per-patient transaction bundles (PUT with dataset ids, lab Observations skipped) into IRIS FHIR, demo patients first; verify counts of Patient, ImagingStudy, DiagnosticReport, DocumentReference against the files
 - [X] T066 [IRIS-A3] `backend/app/fhir_store/iris.py` (`IrisFhirStore`) and `FHIR_BACKEND=iris` as the **default**; the pipeline result on the 10 review patients is identical for `iris` and `local` (LLM from cache)
 - [X] T076 [IRIS-A4] App state (meetings, cases, case results, requests, events) in **IRIS SQL** via SQLAlchemy and the `sqlalchemy-iris` dialect instead of SQLite; `APP_DB_URL=iris://SuperUser:SYS@localhost:1972/FHIRSERVER`; SQLite remains only for unit tests
-- [ ] T077 [IRIS-A5] Update CLAUDE.md (sections 0, 5, 6, 16, 17, 20), the constitution (principle VII) and `plan.md` so that IRIS is the primary store everywhere; remove all "IRIS optional/later" wording
+- [x] T077 [IRIS-A5] Update CLAUDE.md (sections 0, 5, 6, 16, 17, 20), the constitution (principle VII) and `plan.md` so that IRIS is the primary store everywhere; remove all "IRIS optional/later" wording (done)
 
 **Checkpoint A**: `docker compose up` + `iris_setup.py` + `load_iris.py` give a loaded IRIS; the app and pipeline run with IRIS FHIR and IRIS SQL by default.
 
