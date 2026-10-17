@@ -106,6 +106,24 @@ const PATHS = {
       <path d="M12 11v6M12 7.5v.1" />
     </>
   ),
+  inbox: <path d="M3 13l3-8h12l3 8v6H3v-6zM3 13h5l1.5 2.5h5L16 13h5" />,
+  building: <path d="M4 21V5l8-2v18M12 8h8v13M3 21h18M7 8h2M7 12h2M7 16h2M15 12h2M15 16h2" />,
+  network: (
+    <>
+      <circle cx="12" cy="5" r="2.2" />
+      <circle cx="5" cy="19" r="2.2" />
+      <circle cx="19" cy="19" r="2.2" />
+      <path d="M12 7.2v4.3M12 11.5L6.3 17.2M12 11.5l5.7 5.7" />
+    </>
+  ),
+  database: (
+    <>
+      <ellipse cx="12" cy="5.5" rx="7.5" ry="2.5" />
+      <path d="M4.5 5.5v13c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-13M4.5 12c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5" />
+    </>
+  ),
+  external: <path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6" />,
+  send: <path d="M4 12l16-8-6 16-2.5-6.5L4 12zM11.5 13.5L20 4" />,
 } satisfies Record<string, ReactElement>;
 
 export type IconName = keyof typeof PATHS;

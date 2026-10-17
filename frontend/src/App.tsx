@@ -10,6 +10,9 @@ import AddPatient from "./pages/AddPatient";
 import Dashboard from "./pages/Dashboard";
 import DayView from "./pages/DayView";
 import PatientDetail from "./pages/PatientDetail";
+import Worklist from "./pages/Worklist";
+import Hospitals from "./pages/Hospitals";
+import Integration from "./pages/Integration";
 
 interface RailItem {
   to: string;
@@ -22,6 +25,9 @@ interface RailItem {
 const RAIL: RailItem[] = [
   { to: "/", label: cs.app.crumbDashboard, icon: "home", end: true },
   { to: "/pridat", label: cs.app.addPatient, icon: "userPlus" },
+  { to: "/zadosti", label: cs.system.rail.worklist, icon: "inbox" },
+  { to: "/nemocnice", label: cs.system.rail.hospitals, icon: "building" },
+  { to: "/integrace", label: cs.system.rail.integration, icon: "network" },
   ...(isMockMode ? [{ to: `/cases/${MOCK_CASE_ID}`, label: cs.app.homeMockLink, icon: "user" as IconName }] : []),
 ];
 
@@ -70,6 +76,9 @@ function useCrumb(): string | null {
   if (day) return `MDT ${weekdayShort(day[1])} ${formatDayMonth(day[1])}`;
   if (pathname.startsWith("/pridat")) return cs.app.addPatient;
   if (pathname.startsWith("/cases/")) return cs.app.crumbPatient;
+  if (pathname.startsWith("/zadosti")) return cs.system.rail.worklist;
+  if (pathname.startsWith("/nemocnice")) return cs.system.rail.hospitals;
+  if (pathname.startsWith("/integrace")) return cs.system.rail.integration;
   return null;
 }
 
@@ -135,6 +144,9 @@ export default function App() {
             <Route path="/dny/:date" element={<DayView />} />
             <Route path="/pridat" element={<AddPatient key={location.search} />} />
             <Route path="/cases/:caseId" element={<PatientDetail />} />
+            <Route path="/zadosti" element={<Worklist />} />
+            <Route path="/nemocnice" element={<Hospitals />} />
+            <Route path="/integrace" element={<Integration />} />
             <Route path="*" element={<p className="nis-panel p-4">{cs.app.notFound}</p>} />
           </Routes>
         </main>

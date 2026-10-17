@@ -31,7 +31,7 @@ export default function HeaderStrip({
             <h1 className="text-2xl font-bold text-accent-600">{patient.display_name}</h1>
             <TagField label={cs.header.pseudonym}>{patient.id}</TagField>
             <TagField label={cs.header.sexAge}>
-              {patient.sex}, {patient.age_band}
+              {cs.system.sex[patient.sex] ?? patient.sex}, {patient.age_band}
             </TagField>
             <span className="inline-flex min-w-0 items-center gap-1.5">
               <TagField label={cs.header.dg}>
