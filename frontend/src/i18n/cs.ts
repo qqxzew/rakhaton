@@ -187,8 +187,8 @@ export const cs = {
     reminder: "odeslána připomínka",
     voice: "připomínka a automatický telefonát",
     acknowledged: "nemocnice potvrdila, snímky odešle",
-    deliveredConfirm: (provider: string) =>
-      `Snímky dorazily${provider ? ` (${provider})` : ""}, kontrola souhlasí – potvrďte převzetí`,
+    autoVerified: (provider: string, when: string) =>
+      `Doručeno a automaticky ověřeno ${when}${provider ? ` (${provider})` : ""}`,
     deliveredMismatch: "Snímky dorazily, ale neodpovídají žádosti – zkontrolujte",
     rejected: (provider: string) => `Snímky nelze získat: ${provider || "pracoviště"} studii nemá`,
     wrongRecipient: "Snímky nelze získat: nesprávný příjemce, zvolte jiné pracoviště",
@@ -198,9 +198,6 @@ export const cs = {
     notInPacs: "Studie existuje, snímky nejsou v PACS – žádost zatím nevytvořena",
     notFound: "Uvedeno v nálezu, snímky nikde nenalezeny – žádost zatím nevytvořena",
     uncertain: "Dostupnost snímků je nejistá, ověřte",
-    confirm: "Potvrdit převzetí",
-    confirmTitle: "Potvrdit převzetí snímků",
-    confirmHint: "Doručená studie prošla automatickou kontrolou (modalita, datum, oblast). Potvrzením ji uznáte jako srovnávací vyšetření.",
     detail: "Detail žádosti",
     simulation: "Simulace",
     openIssues: (n: number) => `${n} další upozornění v podrobnostech`,

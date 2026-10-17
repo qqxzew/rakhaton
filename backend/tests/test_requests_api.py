@@ -192,19 +192,38 @@ def test_delivery_without_hospital_study_uses_request_values_and_verifies(client
     wrong = client.post(f"/api/requests/{rid}/simulate-delivery", json={"modality": "CT"})
     assert wrong.json()["state"] == "RECEIVED"
     assert fake.calls[-1][2] == {"modality": "CT", "date": "2025-05-12", "region": "chest"}
+    with session_scope() as db:
+        # a delivery that failed the automatic check keeps the item missing
+        case = db.get(Case, case_id)
+        assert case.readiness == "not_ready" and case.readiness_reason.startswith("Chybí")
     early = client.post(f"/api/cases/{case_id}/items/ITEM-TEST-1/confirm", json={"coordinator": "K"})
     assert early.status_code == 422
     right = client.post(f"/api/requests/{rid}/simulate-delivery", json={})
     assert right.json()["state"] == "VERIFIED"
     with session_scope() as db:
+        # verified automatically: ready without any coordinator click
         case = db.get(Case, case_id)
-        # verified automatically, but the coordinator still has to confirm the delivery
-        assert case.readiness == "attention" and "čeká na potvrzení" in case.readiness_reason
+        assert (case.readiness, case.readiness_reason) == ("ready", "Všechna požadovaná vyšetření ověřena")
+    # the optional sign-off stays harmless
     confirmed = client.post(f"/api/cases/{case_id}/items/ITEM-TEST-1/confirm", json={"coordinator": "K"})
     assert confirmed.status_code == 200 and confirmed.json()["confirmed"]
     with session_scope() as db:
         case = db.get(Case, case_id)
         assert (case.readiness, case.readiness_reason) == ("ready", "Všechna požadovaná vyšetření ověřena")
+
+
+def test_overlay_marks_verified_delivery_ok_with_automatic_actor():
+    from app.pipeline.schemas import CaseCheckResult, RequiredItem, Timeline
+    from app.requests.overlay import AUTO_VERIFIER, overlay_result
+
+    item = RequiredItem(id="ITEM-T", rule_ids=["R1"], reasons=["t"], modality="CT", regions=["chest"],
+                        target_date={"year": 2025, "month": 5, "day": 12}, availability="not_found", state="missing")
+    result = CaseCheckResult(patient_id="PAC-TEST-0001", timeline=Timeline(patient_id="PAC-TEST-0001"), items=[item])
+    done = overlay_result(result, "done", {}, {"ITEM-T": {"requestId": "PACS-REQ-000001", "state": "VERIFIED"}})
+    assert done.items[0].state == "ok" and done.items[0].availability == "available"
+    assert AUTO_VERIFIER in done.items[0].note and done.readiness == "ready"
+    failed = overlay_result(result, "done", {}, {"ITEM-T": {"requestId": "PACS-REQ-000001", "state": "RECEIVED"}})
+    assert failed.items[0].state == "missing" and failed.readiness == "not_ready"
 
 
 def test_case_detail_carries_request_state(client_and_fake):

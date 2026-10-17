@@ -405,7 +405,7 @@ def acknowledge_issue(case_id: str, issue_key: str, body: AckBody, db: Session =
 @router.post("/cases/{case_id}/items/{item_id}/confirm")
 def confirm_delivery(case_id: str, item_id: str, body: AckBody, db: Session = Depends(_db_dependency),
                      client: ProductionClient = Depends(production)) -> dict:
-    """Coordinator confirms a delivered and automatically verified study; only then the item counts as ok."""
+    """Optional coordinator sign-off of an automatically verified delivery; readiness does not wait for it."""
     case = _case_for_item(db, item_id, case_id)
     req = requests_for_case(client, case).get(item_id) if client is not None else None
     if req is None or req.get("state") not in DONE_STATES:

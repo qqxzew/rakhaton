@@ -22,6 +22,7 @@ from app.requests.production_client import ProductionClient, ProductionError, ge
 log = get_logger(__name__)
 
 DONE_STATES = ("VERIFIED", "CLOSED")
+AUTO_VERIFIER = "systém (automatická kontrola)"
 
 
 def confirm_key(item_id: str) -> str:
@@ -73,13 +74,13 @@ def overlay_result(result: CaseCheckResult, check_status: str, waivers: dict[str
             update.update(waived=True, note=f"Odpuštěno: {waiver.reason}")
         req = requests.get(item.id)
         if req is not None and req.get("state") in DONE_STATES:
-            # the automatic check passed; the item is ok only after the coordinator confirms the delivery
-            if confirm_key(item.id) in (acks or {}):
+            # the automatic check (modality, date, region) passed; no coordinator click is needed. A failed check
+            # leaves the request in RECEIVED, so the item stays missing. A manual confirmation only adds a name.
+            if waiver is None:
+                confirmation = (acks or {}).get(confirm_key(item.id))
+                who = confirmation.actor if confirmation is not None else AUTO_VERIFIER
                 update.update(availability="available", state="ok",
-                              note=f"Doručeno, ověřeno a potvrzeno ({req.get('requestId')}, simulace)")
-            elif not item.waived:
-                update.update(availability="available", state="attention",
-                              note=f"Snímky doručeny ({req.get('requestId')}), čeká na potvrzení")
+                              note=f"Doručeno a ověřeno: {who} ({req.get('requestId')}, simulace)")
         items.append(item.model_copy(update=update) if update else item)
     settled = {i.id for i in items if i.waived or (requests.get(i.id) or {}).get("state") in DONE_STATES}
     issues = []
