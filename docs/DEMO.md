@@ -8,12 +8,16 @@ Everything runs locally. Patient data stays on this machine.
 docker compose up -d                                   # IRIS for Health + Mailpit (data volume keeps everything)
 docker compose -f docker-compose.yml -f docker-compose.dicom.yml up -d orthanc-motol orthanc-nnh orthanc-homolka orthanc-fnm
 cd backend && uv run python scripts/iris_setup.py      # idempotent: FHIR endpoints, search limit, production
+uv run python scripts/dicom_iris_setup.py              # once: IRIS namespace PACSDICOM (C-FIND client)
+uv run python scripts/seed_dicom.py                    # idempotent: synthetic blank DICOM studies into the 4 Orthanc (demo + cloud + review patients)
 uv run python scripts/demo_reset.py                    # backup + clean state + 3 demo patients + nightly run
 uv run uvicorn app.main:app --reload --port 8000       # backend (keep running)
 cd ../frontend && npm run dev                          # frontend on http://localhost:5173 (restart it after a pull!)
 ```
 
-Check: `http://localhost:8000/api/health` shows `backend: iris, patients: 1830`. Mailpit: `http://localhost:8025`.
+Check: `http://localhost:8000/api/health` shows `backend: iris, patients: 1830` and `pacs.status: ok` (all four Orthanc answer, a C-FIND through IRIS works). Mailpit: `http://localhost:8025`; Orthanc (simulated ePACS) UI: `http://localhost:8051` (Motol), 8052 NNH, 8053 Homolka, 8054 FNM.
+
+Image availability is checked by the system itself: study-level DICOM C-FIND against these Orthanc (`AVAILABILITY_ADAPTER` empty = `dicom`). If a PACS does not answer, the item falls back to the hospital FHIR endpoints / dataset flag with a warning in the log and `availability_source` set on the item; the pipeline never stops. Leave `AVAILABILITY_ADAPTER` empty in `.env` (an old `fhir_hospitals` line switches the check back).
 Backup video of the whole flow: `data/demo/pacs_komparator_demo.mp4` (2:08, Czech voice-over).
 
 ## 1. At the customer's table (3 minutes, in Czech)

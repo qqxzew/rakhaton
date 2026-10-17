@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -38,6 +39,45 @@ def _check_fhir() -> dict:
     return {"status": "ok", "backend": "local", "patients": sum(1 for _ in fhir_dir.glob("PAC-*.json"))}
 
 
+def _probe_orthanc(rest: str) -> bool:
+    try:
+        return httpx.get(f"{rest}/system", timeout=1.5).status_code == 200
+    except httpx.HTTPError:
+        return False
+
+
+def _probe_cfind(ae: str) -> bool:
+    """A real study-level C-FIND for a patient that does not exist: proves the IRIS -> DICOM -> Orthanc path."""
+    from app.exchange.dicom import default_client
+
+    try:
+        default_client().find(ae, "HEALTH-PROBE", None, None)
+        return True
+    except Exception:  # noqa: BLE001 - any failure means the path is down
+        return False
+
+
+def _check_pacs() -> dict:
+    """Simulated PACS (Orthanc, one per AE) and the C-FIND path. Informational: a failure only degrades
+    the health, because the availability check falls back to the FHIR hospitals / dataset flag."""
+    settings = get_settings()
+    if settings.availability_adapter != "dicom":
+        return {"status": "skipped", "adapter": settings.availability_adapter, "simulated": True}
+    try:
+        from app.exchange.dicom import nodes
+
+        pacs = nodes()
+    except Exception as exc:  # noqa: BLE001
+        return {"status": "error", "adapter": "dicom", "detail": type(exc).__name__}
+    orthanc = {node.ae: _probe_orthanc(node.rest) for node in pacs.values()}
+    first = next(iter(pacs.values()))
+    cfind = _probe_cfind(first.ae) if orthanc[first.ae] else False
+    status = "ok" if cfind and all(orthanc.values()) else "error"
+    return {"status": status, "adapter": "dicom", "client": settings.dicom_client, "orthanc": orthanc,
+            "cfind": cfind, "simulated": True,
+            **({} if status == "ok" else {"detail": "fallback to FHIR hospitals / dataset flag"})}
+
+
 def _check_llm() -> dict:
     settings = get_settings()
     if not settings.api_key:
@@ -47,7 +87,8 @@ def _check_llm() -> dict:
 
 @router.get("/health")
 def health() -> JSONResponse:
-    checks = {"database": _check_db(), "fhir_store": _check_fhir(), "llm": _check_llm()}
+    checks = {"database": _check_db(), "fhir_store": _check_fhir(), "pacs": _check_pacs(), "llm": _check_llm()}
     required_ok = checks["database"]["status"] == "ok" and checks["fhir_store"]["status"] == "ok"
-    overall = "ok" if required_ok and checks["llm"]["status"] == "ok" else "degraded" if required_ok else "error"
+    optional_ok = checks["llm"]["status"] == "ok" and checks["pacs"]["status"] in ("ok", "skipped")
+    overall = "ok" if required_ok and optional_ok else "degraded" if required_ok else "error"
     return JSONResponse(status_code=200 if required_ok else 503, content={"status": overall, **checks})
