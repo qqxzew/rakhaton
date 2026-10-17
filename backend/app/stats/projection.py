@@ -89,8 +89,46 @@ def collect_stats(cursor: Cursor) -> dict[str, Any]:
     }
 
 
+def sql_pool_enabled() -> bool:
+    """IRIS_SQL_POOL=1: borrow warm connections from the app_db pool. On the cloud IRIS the first SQL statement of
+    every new connection takes about 30 s, so per-request connections are too slow there."""
+    return os.environ.get("IRIS_SQL_POOL", "").strip() == "1"
+
+
+def pooled_connection() -> Any:
+    """A DBAPI connection from the app_db engine pool (same IRIS namespace); close() returns it to the pool."""
+    from app.app_db.session import get_engine
+
+    return get_engine().raw_connection()
+
+
+def warm_pool(size: int = 5) -> None:
+    """Pay the slow first statement once per pooled connection, concurrently, right after startup."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    conns = []
+    try:
+        conns = [pooled_connection() for _ in range(size)]
+
+        def ping(conn: Any) -> None:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.fetchall()
+
+        with ThreadPoolExecutor(size) as pool:
+            list(pool.map(ping, conns))
+    except Exception:  # noqa: BLE001 - warming is best effort
+        pass
+    finally:
+        for conn in conns:
+            conn.close()
+
+
 def open_cursor() -> tuple[Any, Callable[[], None]]:
     """Connect to the IRIS SQL port of the namespace that holds the projection."""
+    if sql_pool_enabled():
+        raw = pooled_connection()
+        return raw.cursor(), raw.close
     import iris
 
     from app.config import get_settings

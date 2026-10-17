@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Any
 
@@ -53,6 +54,8 @@ def prediction_for_request(data: dict[str, Any], cursor: Any = None) -> dict[str
 def predict_request(provider: str, modality: str, region: str, sent_at: datetime, deadline: datetime,
                     channel: str, cursor: Any = None) -> dict[str, Any]:
     """Probability that the study arrives after the deadline and the expected response time in hours."""
+    if os.environ.get("ML_PREDICT", "").strip().lower() == "off":  # e.g. a cloud IRIS without the AutoML engine
+        raise RuntimeError("IntegratedML predictions are disabled (ML_PREDICT=off)")
     close = None
     if cursor is None:
         from app.stats.projection import open_cursor

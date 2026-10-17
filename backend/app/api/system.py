@@ -9,6 +9,7 @@ here approves or sends a request (approval stays in /api/requests, hard rule 3).
 from __future__ import annotations
 
 import re
+import threading
 import time
 from collections.abc import Callable, Iterator
 from datetime import date, datetime, timedelta
@@ -109,15 +110,25 @@ class IrisSystem:
         self._conn: Any = None
         self._cursor: Any = None
         self._native: Any = None
+        self._pooled: Any = None
 
     def _connect(self) -> None:
         if self._conn is None:
-            import iris
+            from app.stats.projection import pooled_connection, sql_pool_enabled
 
-            s = get_settings()
-            host = urlparse(s.iris_fhir_base).hostname or "localhost"
-            self._conn = iris.createConnection(host, 1972, "FHIRSERVER", s.iris_user or "SuperUser",
-                                               s.iris_password or "SYS")
+            if sql_pool_enabled():
+                self._pooled = pooled_connection()
+                self._conn = self._pooled.dbapi_connection
+                return
+            self._conn = self._new_connection()
+
+    @staticmethod
+    def _new_connection() -> Any:
+        import iris
+
+        s = get_settings()
+        host = urlparse(s.iris_fhir_base).hostname or "localhost"
+        return iris.createConnection(host, 1972, "FHIRSERVER", s.iris_user or "SuperUser", s.iris_password or "SYS")
 
     def cursor(self) -> Any:
         self._connect()
@@ -130,7 +141,10 @@ class IrisSystem:
         if self._native is None:
             import iris
 
-            self._native = iris.createIRIS(self._conn)
+            if self._pooled is not None:  # the pooled SQL connection cannot carry native API calls
+                self._native = shared_native()
+            else:
+                self._native = iris.createIRIS(self._conn)
         return self._native
 
     def rows(self, sql: str, params: list | None = None) -> list[tuple]:
@@ -174,10 +188,33 @@ class IrisSystem:
     def close(self) -> None:
         if self._conn is not None:
             try:
-                self._conn.close()
+                (self._pooled or self._conn).close()  # a pooled connection goes back to the pool
             except Exception:  # noqa: BLE001
                 pass
-            self._conn = self._cursor = self._native = None
+            self._conn = self._cursor = self._native = self._pooled = None
+
+
+_native_lock = threading.Lock()
+_native_api: Any = None
+
+
+def shared_native() -> Any:
+    """One long-lived native API connection per process (IRIS_SQL_POOL=1), like the production client: on the cloud
+    IRIS the first call of every new connection takes about 30 s."""
+    global _native_api
+    with _native_lock:
+        if _native_api is None:
+            import iris
+
+            _native_api = iris.createIRIS(IrisSystem._new_connection())
+        return _native_api
+
+
+def warm_native() -> None:
+    try:
+        shared_native().classMethodValue("%SYSTEM.Version", "GetNumber")
+    except Exception:  # noqa: BLE001 - warming is best effort
+        pass
 
 
 def get_iris() -> Iterator[IrisSystem]:
