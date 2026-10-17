@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api import cache as api_cache
 from app.api.case_views import fictional_name
 from app.api.errors import ValidationFailed
 from app.api.requests import production
@@ -287,7 +288,13 @@ def _safe_predict(iris: IrisSystem, cache: dict, provider: str, modality: str, r
 @router.get("/worklist")
 def worklist(db: Session = Depends(get_db), client: ProductionClient = Depends(production),
              iris: IrisSystem = Depends(get_iris)) -> dict:
-    """All requests of the production (IRIS SQL PacsComparator_Req.*) joined with cases and meetings."""
+    """All requests of the production (IRIS SQL PacsComparator_Req.*) joined with cases and meetings.
+    Cached for a few seconds (invalidated by every request action)."""
+    return api_cache.cached(f"worklist:{id(client)}:{id(iris)}", lambda: _worklist(db, client, iris),
+                            keep=lambda v: bool(v.get("available")))
+
+
+def _worklist(db: Session, client: ProductionClient, iris: IrisSystem) -> dict:
     try:
         rows = client.list("")
     except Exception as exc:  # noqa: BLE001 - ProductionError or driver errors
@@ -349,6 +356,12 @@ def worklist(db: Session = Depends(get_db), client: ProductionClient = Depends(p
 @router.get("/hospitals")
 def hospitals_view(client: ProductionClient = Depends(production), iris: IrisSystem = Depends(get_iris),
                    fhir: FhirReader = Depends(get_fhir)) -> dict:
+    return api_cache.cached(f"hospitals:{id(client)}:{id(iris)}:{id(fhir)}",
+                            lambda: _hospitals(client, iris, fhir),
+                            keep=lambda v: bool(v.get("requests_available")))
+
+
+def _hospitals(client: ProductionClient, iris: IrisSystem, fhir: FhirReader) -> dict:
     origin = _iris_origin()
     requests_ok = True
     reason = None
@@ -633,3 +646,28 @@ def system_dicom_cfind(body: CFindBody, db: Session = Depends(get_db), client: A
             "matches": [{"study_date": m.study_date.isoformat() if m.study_date else None, "modality": m.modality,
                          "accession": m.accession} for m in matches],
             "simulated": True}
+
+# --- AI quality (silver standard) ------------------------------------------------------------------
+
+EVAL_FIELDS = ("reports", "silver_citations", "recall_pct", "date_accuracy_given_modality_pct", "in_dataset_pct",
+               "naive_latest_same_modality_pct")
+
+
+@router.get("/system/eval")
+def system_eval() -> dict:
+    """Extraction quality from DATA_DIR/eval/silver.json (silver standard: citations that a regex can read
+    reliably, not a manual annotation). Counts only, no report text."""
+    import json
+
+    path = get_settings().data_dir / "eval" / "silver.json"
+    if not path.exists():
+        return _unavailable("Vyhodnocení zatím neproběhlo (chybí eval/silver.json)")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return _unavailable(f"Soubor s vyhodnocením nelze přečíst ({type(exc).__name__})")
+    if not isinstance(data, dict):
+        return _unavailable("Soubor s vyhodnocením má neočekávaný tvar")
+    out = {k: data.get(k) for k in EVAL_FIELDS}
+    out.update(available=True, kind="silver", label="Silver standard (automaticky čitelné citace), ne ruční anotace")
+    return out

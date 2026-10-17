@@ -16,8 +16,10 @@ from app.api.schemas import (
     PatientView,
     PlannedExamView,
     ProposedMatch,
+    RequestRef,
     RequiredItemView,
     TimelineEntry,
+    WaiverView,
 )
 from app.app_db.models import Case
 from app.config import today
@@ -119,14 +121,25 @@ def _evidence(item_evidence) -> EvidenceView | None:
                         confidence=item_evidence.confidence)
 
 
+def _request_ref(row: dict | None) -> RequestRef | None:
+    if not row:
+        return None
+    return RequestRef(id=row["requestId"], state=row.get("state", ""), updated_at=row.get("updatedAt", ""),
+                      provider_name=(row.get("provider") or {}).get("name") or None,
+                      approved_by=row.get("approvedBy") or None)
+
+
 def build_case_detail(case: Case, result: CaseCheckResult, adapter: AvailabilityAdapter | None = None,
-                      display_name: str | None = None) -> CaseDetail:
+                      display_name: str | None = None, requests: dict[str, dict] | None = None,
+                      waivers: dict | None = None) -> CaseDetail:
     adapter = adapter or DatasetFlagAdapter()
     offset = compute_offset(case.meeting.date, result.reference_date, case.date_offset_days)
+    waivers = waivers or {}
 
     items: list[RequiredItemView] = []
     for item in result.items:
         shown, precision = _partial(item.target_date, offset)
+        waiver = waivers.get(item.id)
         items.append(RequiredItemView(
             id=item.id, reasons=item.reasons, modality=item.modality, regions=item.regions,
             target_date=shown, target_date_precision=precision,
@@ -138,6 +151,10 @@ def build_case_detail(case: Case, result: CaseCheckResult, adapter: Availability
             proposed_match=ProposedMatch(study_id=item.study_id, report_id=item.proposed_report_id,
                                          score=item.similarity_score or 0.0)
             if item.proposed_report_id and item.study_id else None,
+            request=_request_ref((requests or {}).get(item.id)),
+            waiver=WaiverView(reason=waiver.reason, actor=waiver.actor,
+                              waived_at=waiver.waived_at.isoformat(timespec="minutes"))
+            if waiver is not None else None,
         ))
 
     planned = result.planned_exam
@@ -145,7 +162,7 @@ def build_case_detail(case: Case, result: CaseCheckResult, adapter: Availability
         modality="MDT" if planned.kind == "mdt" else planned.modality, regions=planned.regions,
         date=_shift(planned.date, offset) if planned.date else None, site=planned.site_text,
         quote=planned.evidence.quote, source_doc_id=planned.source_doc_id,
-        confidence=planned.evidence.confidence,
+        confidence=planned.evidence.confidence, source=planned.source,
     ) if planned else None
 
     tl = result.timeline

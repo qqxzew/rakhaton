@@ -111,3 +111,16 @@ class CaseResult(Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     case: Mapped[Case] = relationship(back_populates="result")
+
+
+class ItemWaiver(Base):
+    """A coordinator's decision that a required item is not needed (who, when, why). Item ids are stable
+    hashes, so a waiver survives pipeline reruns."""
+
+    __tablename__ = "item_waiver"
+
+    case_id: Mapped[str] = mapped_column(ForeignKey("case.id"), primary_key=True)
+    item_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    reason: Mapped[str] = mapped_column(String(400))
+    actor: Mapped[str] = mapped_column(String(100))
+    waived_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

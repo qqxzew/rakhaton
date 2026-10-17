@@ -65,5 +65,8 @@ def _no_real_dataset(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("APP_DB_URL", f"sqlite:///{(tmp_path / 'data' / 'app.db').as_posix()}")
     monkeypatch.setenv("API_KEY", "test-key-not-real")
     app_config.get_settings.cache_clear()
+    from app.api import cache as api_cache
+
+    api_cache.invalidate()
     yield
     app_config.get_settings.cache_clear()

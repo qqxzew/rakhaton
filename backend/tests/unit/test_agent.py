@@ -148,7 +148,23 @@ def test_vector_search_uses_iris_index(monkeypatch):
     assert out["sources"] == ["rep-TEST-1"] and out["results"][0]["score"] == 0.91
 
 
-def test_request_status_stub_and_unknown_tool():
+def test_request_status_reads_production_and_unknown_tool(monkeypatch):
+    from app.requests import production_client as pc
+
+    class Fake:
+        def get(self, rid):
+            return {"requestId": rid, "state": "SENT", "provider": {"name": "H"}, "fhirTaskId": rid,
+                    "history": [{"ts": "t", "to": "SENT", "note": "n"}]} if rid.endswith("1") else None
+
+    class Down:
+        def get(self, rid):
+            raise pc.ProductionError("down")
+
+    monkeypatch.setattr(pc, "get_client", lambda: Fake())
+    out = tools.request_status("PACS-REQ-000001")
+    assert out["state"] == "SENT" and out["provider"] == "H" and "Task/PACS-REQ-000001" in out["sources"]
+    assert tools.request_status("PACS-REQ-000002")["found"] is False
+    monkeypatch.setattr(pc, "get_client", lambda: Down())
     assert tools.request_status("PACS-REQ-000001")["available"] is False
     assert "error" in tools.call_tool("nope", {})
 

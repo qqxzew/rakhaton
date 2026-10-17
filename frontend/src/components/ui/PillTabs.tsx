@@ -65,7 +65,7 @@ export function StatChip({
   icon: IconName;
   iconClass?: string;
   label: string;
-  value: number;
+  value: number | string;
   children?: ReactNode;
 }) {
   return (

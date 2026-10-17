@@ -5,6 +5,7 @@ import { useDashboard } from "../services/api";
 import type { DashboardDay, MeetingSummary, ReadinessState } from "../services/api-types";
 import { formatDayMonth, weekdayShort } from "../components/format";
 import { CountsText } from "../components/ReadinessLabel";
+import NightlyBanner from "../components/NightlyBanner";
 import { ReadinessTag } from "../components/ReadinessBadge";
 import { ErrorState, PillTabs, READINESS_ROW, SectionHeader, StatChip } from "../components/ui";
 
@@ -46,6 +47,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-3">
       <SectionHeader icon="calendar" title={cs.dashboard.title(formatDayMonth(data.start), formatDayMonth(data.end))} />
+
+      <NightlyBanner />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <PillTabs<Filter>

@@ -177,6 +177,8 @@ class PlannedExam(BaseModel):
     source_doc_date: Date | None = None
     evidence: Evidence
     corrected_by_coordinator: bool = False
+    # "ris": an order from the simulated RIS (HL7 ORM^O01 -> FHIR ServiceRequest), "text": extracted from notes.
+    source: Literal["text", "ris", "coordinator"] = "text"
 
 
 class TreatmentMilestones(BaseModel):

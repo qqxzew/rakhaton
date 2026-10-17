@@ -651,11 +651,24 @@ Real PACS/ePACS/DICOM connections, real telephony, real email to real hospitals,
 | M2 | partly done | planned exam, R1 to R5, open issues, FHIR writes of ServiceRequest, Observation, Provenance (local store); `Task` comes with US3 |
 | M3 | partly done | `Meeting`/`Case` models, case API (`GET /api/cases/{id}`, recheck, planned-exam PATCH, source documents), dev helper `scripts/create_case.py`; scheduling, dashboard and add-patient come with US2 |
 | M4 | partly done | scaffold and patient detail page only (`npm run dev:mock` shows it without a backend) |
-| M5 | not started | |
-| M6 | not started | |
+| M5 | done in UI (branch `ui-func2`) | request loop runs in the IRIS production (Stage C); the UI drafts, approves, simulates replies and deliveries, waives |
+| M6 | done in UI (branch `ui-func2`) | nightly run, advance time, reminder and voice escalation through the production; dashboard banner |
 | M7 | not started | |
-| M8 | not started | |
-| M9 | not started | |
+| M8 | partly done | `/statistiky` page with `/api/stats` (FHIR SQL projection) and `/api/system/eval` (silver-set metrics) |
+| M9 | partly done | request drawer, presentation mode hides demo actions, agent chat panel |
+
+### Request workflow in the UI (branch `ui-func2`): done
+- Patient detail: per-item actions (create drafts, approve, reply, call outcome, delivery, waive, open request), request drawer (history, rendered email, reminders, voice transcript/audio, parsed replies, FHIR Task, Visual Trace, IntegratedML prediction), AI assistant panel. The coordinator name is kept in the browser and is required for approvals and waivers.
+- Dashboard banner: nightly run (`POST /api/demo/nightly-run`), summary (`GET /api/demo/summary`), approve all for the window (`case_ids`), advance time +24 h. Page `/statistiky`.
+- Readiness overlay (`app/requests/overlay.py`): the stored check result plus coordinator waivers (table `ItemWaiver`) plus request states from the production; recomputed after every action. Overview endpoints use a short server-side TTL cache, cleared after every action.
+- The planned exam can come from a simulated RIS ORM (`app/pipeline/planned_ris.py`), labeled "RIS (simulace)".
+
+Deviations from this spec:
+- A RIS order is preferred over the text plan and its date is shifted into the patient's date frame.
+- Item ids are patient-scoped, so one request serves all cases of a patient (another MDT); approve all and case views include the sibling cases. Waivers stay per case.
+- Simulated delivery uses the request's own modality, date and region when no seeded hospital study exists.
+- The nightly run is synchronous (one request), drafts only and never sends.
+- Approve all is scoped by the case ids of the 7-day window, not by meeting.
 
 ### IRIS Core Track, Stage A (branch `iris-track`): done
 - `docker-compose.yml` runs IRIS for Health (`infra/iris/`, container `iris-fhir`, ports 1972/52773, named volume) and Mailpit (1025/8025). After `docker compose up --build -d` run `uv run python scripts/iris_setup.py` once in `backend/` (creates namespace `FHIRSERVER`, FHIR R4 endpoint `/fhir/r4`, raises the search limit to 100000).

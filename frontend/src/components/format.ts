@@ -9,7 +9,7 @@ export function formatDate(iso: string | null | undefined): string {
 }
 
 export function formatDateTime(iso: string): string {
-  const time = /T(\d{2}:\d{2})/.exec(iso)?.[1];
+  const time = /[T ](\d{2}:\d{2})/.exec(iso)?.[1];
   return time ? `${formatDate(iso)} ${time}` : formatDate(iso);
 }
 

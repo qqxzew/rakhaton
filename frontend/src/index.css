@@ -19,6 +19,11 @@ html.presentation {
   font-size: 18px;
 }
 
+/* demo controls never show on the projector */
+html.presentation .demo-only {
+  display: none;
+}
+
 body {
   @apply bg-nis-page font-sans text-base text-nis-text antialiased;
 }

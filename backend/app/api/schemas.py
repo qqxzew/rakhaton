@@ -54,6 +54,7 @@ class PlannedExamView(BaseModel):
     quote: str | None
     source_doc_id: str | None
     confidence: float | None
+    source: Literal["text", "ris", "coordinator"] = "text"
 
 
 class TimelineEntry(BaseModel):
@@ -82,6 +83,14 @@ class RequestRef(BaseModel):
     id: str
     state: str
     updated_at: str
+    provider_name: str | None = None
+    approved_by: str | None = None
+
+
+class WaiverView(BaseModel):
+    reason: str
+    actor: str
+    waived_at: str
 
 
 class ProposedMatch(BaseModel):
@@ -104,6 +113,7 @@ class RequiredItemView(BaseModel):
     holding_site_basis: Literal["stated", "text_near_date"] | None = None
     evidence: EvidenceView | None
     request: RequestRef | None = None
+    waiver: WaiverView | None = None
     simulated: bool = True
     note: str | None = None
     proposed_match: ProposedMatch | None = None
@@ -125,6 +135,7 @@ class CaseDetail(BaseModel):
     shifted: bool = True
     check_status: str = "done"
     notes: list[str] = Field(default_factory=list)
+    requests_available: bool = True
 
 
 class SourceDocumentView(BaseModel):

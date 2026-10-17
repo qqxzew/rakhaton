@@ -218,6 +218,7 @@ export const systemApi = {
   ml: (): Promise<MlOverview> => call("/system/ml"),
   sql: (): Promise<SqlOverview> => call("/system/sql"),
   mcp: (): Promise<McpOverview> => call("/system/mcp"),
+  stats: (): Promise<SqlStats> => call("/stats"),
   patients: (): Promise<{ patients: CasePatient[] }> => call("/system/patients"),
   vectorSearch: (q: string, patientId: string, includeText: boolean): Promise<VectorResult> =>
     call(

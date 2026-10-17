@@ -22,6 +22,8 @@ from app.pipeline.normalize import clean_regions, normalize_modality
 from app.pipeline.run import run_case_check
 from app.pipeline.schemas import CaseCheckResult, Timeline
 from app.pipeline.timeline import decode_attachment, report_text, to_date
+from app.requests.overlay import optional_client, refresh_case, waivers_for
+from app.requests.production_client import ProductionClient
 from app.scheduling.anchoring import shift_iso, unshift_date
 from app.scheduling.eligibility import validate_registration
 
@@ -77,10 +79,15 @@ def register_case(body: CaseCreate, tasks: BackgroundTasks, db: Session = Depend
 
 
 @router.get("/{case_id}", response_model=CaseDetail)
-def get_case(case_id: str, db: Session = Depends(_db_dependency)) -> CaseDetail:
+def get_case(case_id: str, db: Session = Depends(_db_dependency),
+             client: ProductionClient | None = Depends(optional_client)) -> CaseDetail:
     case = _load_case(db, case_id)
-    result = CaseCheckResult.model_validate(case.result.result) if case.result else _empty_result(case)
-    return build_case_detail(case, result)
+    overlaid, requests = refresh_case(db, case, client)
+    db.commit()
+    result = overlaid or _empty_result(case)
+    detail = build_case_detail(case, result, requests=requests, waivers=waivers_for(db, case.id))
+    detail.requests_available = client is not None and requests is not None
+    return detail
 
 
 def _background_check(case_id: str, store: FhirStore, llm: StructuredLlm) -> None:

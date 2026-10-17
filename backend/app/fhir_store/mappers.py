@@ -104,7 +104,9 @@ def provenance_for(target_type: str, target_id: str, evidence: Evidence, model: 
 def write_case_outputs(store: FhirStore, result: CaseCheckResult, model: str) -> list[str]:
     """Persist derived resources idempotently (deterministic ids, update in place)."""
     written: list[str] = []
-    if result.planned_exam and not result.planned_exam.corrected_by_coordinator:
+    # A RIS order already is a ServiceRequest in FHIR; only text-extracted plans are written.
+    if (result.planned_exam and not result.planned_exam.corrected_by_coordinator
+            and result.planned_exam.source == "text"):
         exam = result.planned_exam
         store.update(planned_exam_to_service_request(exam))
         store.update(provenance_for("ServiceRequest", exam.id, exam.evidence, model))

@@ -13,6 +13,7 @@ import PatientDetail from "./pages/PatientDetail";
 import Worklist from "./pages/Worklist";
 import Hospitals from "./pages/Hospitals";
 import Integration from "./pages/Integration";
+import Stats from "./pages/Stats";
 
 interface RailItem {
   to: string;
@@ -28,6 +29,7 @@ const RAIL: RailItem[] = [
   { to: "/zadosti", label: cs.system.rail.worklist, icon: "inbox" },
   { to: "/nemocnice", label: cs.system.rail.hospitals, icon: "building" },
   { to: "/integrace", label: cs.system.rail.integration, icon: "network" },
+  { to: "/statistiky", label: cs.stats.rail, icon: "chart" },
   ...(isMockMode ? [{ to: `/cases/${MOCK_CASE_ID}`, label: cs.app.homeMockLink, icon: "user" as IconName }] : []),
 ];
 
@@ -79,6 +81,7 @@ function useCrumb(): string | null {
   if (pathname.startsWith("/zadosti")) return cs.system.rail.worklist;
   if (pathname.startsWith("/nemocnice")) return cs.system.rail.hospitals;
   if (pathname.startsWith("/integrace")) return cs.system.rail.integration;
+  if (pathname.startsWith("/statistiky")) return cs.stats.rail;
   return null;
 }
 
@@ -147,6 +150,7 @@ export default function App() {
             <Route path="/zadosti" element={<Worklist />} />
             <Route path="/nemocnice" element={<Hospitals />} />
             <Route path="/integrace" element={<Integration />} />
+            <Route path="/statistiky" element={<Stats />} />
             <Route path="*" element={<p className="nis-panel p-4">{cs.app.notFound}</p>} />
           </Routes>
         </main>

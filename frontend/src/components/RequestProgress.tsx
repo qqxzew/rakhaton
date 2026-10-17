@@ -35,6 +35,11 @@ export default function RequestProgress({ request }: { request: RequestRef | nul
       <div className="text-xs text-nis-muted">
         {request.id} · {formatDateTime(request.updated_at)}
       </div>
+      {request.approved_by && (
+        <div className="text-xs text-nis-muted">
+          {cs.requestDrawer.approvedBy}: {request.approved_by}
+        </div>
+      )}
       {step !== null && (
         <ol className="flex gap-0.5" aria-label={`${step + 1} / ${total}`}>
           {cs.requestSteps.map((name, i) => (

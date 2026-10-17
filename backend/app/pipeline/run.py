@@ -26,6 +26,7 @@ from app.pipeline.extract_priors import extract_references
 from app.pipeline.gaps import build_items, open_issues
 from app.pipeline.match import match_references
 from app.pipeline.normalize import clean_regions, normalize_modality
+from app.pipeline.planned_ris import planned_from_ris
 from app.pipeline.readiness import compute_readiness
 from app.pipeline.rules import compute_required, load_rules_config
 from app.pipeline.schemas import (
@@ -63,6 +64,7 @@ def planned_from_override(override: dict, patient_id: str, fallback: PlannedExam
         source_doc_date=fallback.source_doc_date if fallback else None,
         evidence=evidence,
         corrected_by_coordinator=True,
+        source="coordinator",
     )
 
 
@@ -115,6 +117,10 @@ def run_patient_check(
         planned = choose_planned_exam(exams, latest_doc)
     except ExtractionFailed:
         extra_issues.append(OpenIssue(type="data", text="Extrakce plánovaného vyšetření se nezdařila"))
+    # RIS hook (D3): a live order from the simulated RIS wins over a plan read from note text.
+    ris_planned = planned_from_ris(store, patient_id, latest_doc)
+    if ris_planned is not None:
+        planned = ris_planned
     if planned_override:
         planned = planned_from_override(planned_override, patient_id, planned)
 
@@ -179,6 +185,10 @@ def run_case_check(case_id: str, store: FhirStore, llm: StructuredLlm) -> CaseCh
         else:
             case.result.result, case.result.computed_at, case.result.last_error = (
                 payload, utcnow(), None)
+    # Waivers and verified deliveries from the request loop still count after a rerun.
+    from app.requests.overlay import optional_client, refresh_case_id
+
+    refresh_case_id(case_id, optional_client())
     return result
 
 

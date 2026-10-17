@@ -156,18 +156,18 @@
 
 ### Implementation for User Story 3
 
-- [ ] T043 [P] [US3] Define provider, request and append-only request-event models; require request id, required-item/provider links and approval actor/time before send, with attempts, next-action time and transition history, in `backend/app/requests/models.py` and `backend/app/app_db/models.py`
-- [ ] T044 [P] [US3] Add provider aliases with fake/non-routable contact details and simulated exchange routes in `config/providers.json` and `backend/app/requests/providers.py`
-- [ ] T045 [US3] Implement request states `DETECTED`, `DRAFTED`, `APPROVED`, `SENT`, `ACKNOWLEDGED`, `RECEIVED`, `VERIFIED`, `CLOSED`, `REJECTED`, `NEEDS_INFO`, `WRONG_RECIPIENT`, `CANCELLED`, `REMINDER_SENT`, `VOICE_ESCALATED`, and `HUMAN_ESCALATED`; reject `SENT` unless a durable approval actor and timestamp exist in `backend/app/requests/state_machine.py`
-- [ ] T046 [US3] Implement draft creation per actionable missing item with availability `available`, `not_in_pacs`, `unknown`, or `not_found`; serialize FHIR `Task` with patient focus, coordinator owner, due date and exact request business status in `backend/app/requests/drafts.py` and `backend/app/fhir_store/mappers.py`
-- [ ] T047 [US3] Implement one-request approval and meeting/seven-day approve-all with per-request approval records and `AuditEvent` creation in `backend/app/requests/approval.py` and `backend/app/api/requests.py`
-- [ ] T048 [US3] Implement Czech email rendering containing only request id, study date, modality, body region, requesting site, requested route and deadline; write to ignored `data/outbox/` and optionally deliver via Mailpit SMTP sandbox in `backend/app/requests/email_channel.py`
-- [ ] T049 [US3] Implement reply-to-request matching, reply classification and exact quoted justification persistence in `backend/app/requests/reply_parser.py`
-- [ ] T050 [US3] Implement received-study verification by modality, exact/±3-day or same-month date and region overlap; preserve mismatches and waived state in `backend/app/requests/verification.py`
-- [ ] T051 [US3] Implement item waiver with required non-empty reason, actor/time, append-only transition history and readiness recalculation in `backend/app/api/items.py`
-- [ ] T052 [US3] Implement FHIR `Communication` and audit mappings for outgoing/received messages and coordinator actions in `backend/app/fhir_store/mappers.py`
-- [ ] T053 [US3] Build required-item request actions, approval confirmation, waiver reason input, reply/delivery simulation and request-history drawer in `frontend/src/components/RequiredItems.tsx` and `frontend/src/components/RequestDrawer.tsx`
-- [ ] T054 [US3] Add synthetic tests for request state transitions, approval-before-send, minimal outbound fields, reply classifications, receipt verification and waiver readiness in `backend/tests/unit/test_requests.py` and `backend/tests/api/test_requests.py`
+- [x] T043 [P] [US3] Define provider, request and append-only request-event models; require request id, required-item/provider links and approval actor/time before send, with attempts, next-action time and transition history, in `backend/app/requests/models.py` and `backend/app/app_db/models.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
+- [x] T044 [P] [US3] Add provider aliases with fake/non-routable contact details and simulated exchange routes in `config/providers.json` and `backend/app/requests/providers.py` (done; `config/providers.json`)
+- [x] T045 [US3] Implement request states `DETECTED`, `DRAFTED`, `APPROVED`, `SENT`, `ACKNOWLEDGED`, `RECEIVED`, `VERIFIED`, `CLOSED`, `REJECTED`, `NEEDS_INFO`, `WRONG_RECIPIENT`, `CANCELLED`, `REMINDER_SENT`, `VOICE_ESCALATED`, and `HUMAN_ESCALATED`; reject `SENT` unless a durable approval actor and timestamp exist in `backend/app/requests/state_machine.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
+- [x] T046 [US3] Implement draft creation per actionable missing item with availability `available`, `not_in_pacs`, `unknown`, or `not_found`; serialize FHIR `Task` with patient focus, coordinator owner, due date and exact request business status in `backend/app/requests/drafts.py` and `backend/app/fhir_store/mappers.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
+- [x] T047 [US3] Implement one-request approval and meeting/seven-day approve-all with per-request approval records and `AuditEvent` creation in `backend/app/requests/approval.py` and `backend/app/api/requests.py` (done: `POST /api/requests/{id}/approve`, `/api/requests/approve-all` with `case_ids`; approval and AuditEvent in the production)
+- [x] T048 [US3] Implement Czech email rendering containing only request id, study date, modality, body region, requesting site, requested route and deadline; write to ignored `data/outbox/` and optionally deliver via Mailpit SMTP sandbox in `backend/app/requests/email_channel.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
+- [x] T049 [US3] Implement reply-to-request matching, reply classification and exact quoted justification persistence in `backend/app/requests/reply_parser.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
+- [x] T050 [US3] Implement received-study verification by modality, exact/±3-day or same-month date and region overlap; preserve mismatches and waived state in `backend/app/requests/verification.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
+- [x] T051 [US3] Implement item waiver with required non-empty reason, actor/time, append-only transition history and readiness recalculation in `backend/app/api/items.py` (done: `POST /api/items/{id}/waive`, table `ItemWaiver`, cancels the open request, readiness overlay in `app/requests/overlay.py`)
+- [x] T052 [US3] Implement FHIR `Communication` and audit mappings for outgoing/received messages and coordinator actions in `backend/app/fhir_store/mappers.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
+- [x] T053 [US3] Build required-item request actions, approval confirmation, waiver reason input, reply/delivery simulation and request-history drawer in `frontend/src/components/RequiredItems.tsx` and `frontend/src/components/RequestDrawer.tsx` (done: `ItemActions.tsx`, `ActionDialog.tsx`, `RequestDrawer.tsx` in the required studies table)
+- [x] T054 [US3] Add synthetic tests for request state transitions, approval-before-send, minimal outbound fields, reply classifications, receipt verification and waiver readiness in `backend/tests/unit/test_requests.py` and `backend/tests/api/test_requests.py` (done: `tests/test_requests_api.py` with a fake production; transitions are tested in the production)
 
 **Checkpoint**: The end-to-end request loop is safe by default; no message is delivered before recorded approval, and only a matching receipt can resolve a missing item.
 
@@ -183,12 +183,12 @@
 
 ### Implementation for User Story 4
 
-- [ ] T055 [US4] Implement configurable preparation lead time and nightly meeting/case recheck that summarizes newly drafted requests in `backend/app/requests/scheduler.py`
-- [ ] T056 [US4] Implement demo-clock advancement, one-day reminder, within-48-hour voice escalation and human escalation transitions in `backend/app/requests/follow_up.py` and `backend/app/api/demo.py`
-- [ ] T057 [US4] Implement Czech voice script containing only requesting site, request id and requested route; use optional TTS or browser playback without real telephony in `backend/app/requests/voice_channel.py`
-- [ ] T058 [US4] Implement FHIR `Communication` records for simulated reminders, voice messages and outcomes in `backend/app/fhir_store/mappers.py`
-- [ ] T059 [US4] Add dashboard morning summary, nightly-run/advance-time controls and simulated call outcome controls; hide controls in presentation mode in `frontend/src/components/DemoControls.tsx` and `frontend/src/pages/Dashboard.tsx`
-- [ ] T060 [US4] Add synthetic scheduler tests proving reminder/voice/human escalation ordering, working time conditions, logged events and absence of patient-identifying voice content in `backend/tests/unit/test_follow_up.py`
+- [x] T055 [US4] Implement configurable preparation lead time and nightly meeting/case recheck that summarizes newly drafted requests in `backend/app/requests/scheduler.py` (done: `POST /api/demo/nightly-run`, synchronous, drafts only; `GET /api/demo/summary`)
+- [x] T056 [US4] Implement demo-clock advancement, one-day reminder, within-48-hour voice escalation and human escalation transitions in `backend/app/requests/follow_up.py` and `backend/app/api/demo.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
+- [x] T057 [US4] Implement Czech voice script containing only requesting site, request id and requested route; use optional TTS or browser playback without real telephony in `backend/app/requests/voice_channel.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
+- [x] T058 [US4] Implement FHIR `Communication` records for simulated reminders, voice messages and outcomes in `backend/app/fhir_store/mappers.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
+- [x] T059 [US4] Add dashboard morning summary, nightly-run/advance-time controls and simulated call outcome controls; hide controls in presentation mode in `frontend/src/components/DemoControls.tsx` and `frontend/src/pages/Dashboard.tsx` (done: `NightlyBanner.tsx` on the dashboard; call outcome in `ItemActions.tsx`; `.demo-only` hidden in presentation mode; `DemoControls.tsx` removed)
+- [x] T060 [US4] Add synthetic scheduler tests proving reminder/voice/human escalation ordering, working time conditions, logged events and absence of patient-identifying voice content in `backend/tests/unit/test_follow_up.py` (covered by the IRIS production `PacsComparator.Production`, T081 to T083; branch `ui-func2` adds the backend calls and the overlay)
 
 **Checkpoint**: Demo controls can run the proactive flow without editing data manually; every simulated action is visibly labeled.
 
@@ -204,10 +204,10 @@
 
 ### Implementation for User Story 5
 
-- [ ] T062 [US5] Implement extraction precision/recall, date accuracy, naive latest-same-modality baseline and aggregate counts without logging report text in `backend/scripts/eval_extraction.py`
-- [ ] T063 [US5] Implement summary-only `/api/stats` response for extraction and dataset counts in `backend/app/api/stats.py`
-- [ ] T064 [US5] Build an internal Czech evaluation metrics page showing measured counts and precision/recall without patient identifiers in `frontend/src/pages/Stats.tsx`
-- [ ] T065 [US5] Add synthetic labeled evaluation fixtures and metric/baseline correctness tests in `backend/tests/unit/test_evaluation.py`
+- [x] T062 [US5] Implement extraction precision/recall, date accuracy, naive latest-same-modality baseline and aggregate counts without logging report text in `backend/scripts/eval_extraction.py` (done: `GET /api/stats/eval` reads the silver-set results, counts only)
+- [x] T063 [US5] Implement summary-only `/api/stats` response for extraction and dataset counts in `backend/app/api/stats.py` (done: `GET /api/stats`, FHIR SQL projection, and `/api/system/eval`)
+- [x] T064 [US5] Build an internal Czech evaluation metrics page showing measured counts and precision/recall without patient identifiers in `frontend/src/pages/Stats.tsx` (done: `frontend/src/pages/Stats.tsx`, route `/statistiky`)
+- [x] T065 [US5] Add synthetic labeled evaluation fixtures and metric/baseline correctness tests in `backend/tests/unit/test_evaluation.py` (done: `tests/test_eval_and_cache.py`)
 
 **Checkpoint**: Reported extraction metrics can be reproduced from the label file and do not expose report contents or pseudonyms.
 

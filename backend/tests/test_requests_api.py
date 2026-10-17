@@ -26,19 +26,31 @@ class FakeProduction:
             self.requests[request_id] = {"state": "DRAFTED", "payload": payload}
         elif action == "APPROVE":
             self.requests[request_id]["state"] = "SENT"
+        elif action == "CANCEL":
+            self.requests[request_id]["state"] = "CANCELLED"
+        elif action == "DELIVERY":
+            ok = (payload or {}).get("modality", self.requests[request_id]["payload"]["modality"]) == \
+                self.requests[request_id]["payload"]["modality"]
+            self.requests[request_id]["state"] = "VERIFIED" if ok else "RECEIVED"
         return {"ok": True, "requestId": request_id, "state": self.requests[request_id]["state"]}
 
     def list(self, case_id=""):
-        return list(self.requests)
+        return [{"requestId": r, "itemId": v["payload"]["itemId"], "caseId": v["payload"]["caseId"],
+                 "state": v["state"]} for r, v in self.requests.items()
+                if not case_id or v["payload"]["caseId"] == case_id]
 
     def draft_ids(self, case_ids=None):
-        return [r for r, v in self.requests.items() if v["state"] == "DRAFTED"]
+        return [r for r, v in self.requests.items() if v["state"] == "DRAFTED"
+                and (not case_ids or v["payload"]["caseId"] in case_ids)]
 
     def get(self, request_id):
         if request_id not in self.requests:
             return None
-        return {"requestId": request_id, "state": self.requests[request_id]["state"], "sessionIds": "7,9",
-                "messages": [], "provider": {}}
+        v = self.requests[request_id]
+        return {"requestId": request_id, "state": v["state"], "sessionIds": "7,9", "messages": [], "provider": {},
+                "caseId": v["payload"]["caseId"], "itemId": v["payload"]["itemId"],
+                "modality": v["payload"]["modality"], "targetDate": v["payload"]["targetDate"],
+                "regions": v["payload"]["regions"]}
 
     def advance_time(self, hours):
         return {"offsetSeconds": hours * 3600}
@@ -140,3 +152,87 @@ def test_sync_files_writes_outbox_and_voice(tmp_path):
     sync_files(request, Audio(), tmp_path)
     assert (tmp_path / "outbox" / "PACS-REQ-000100-1.eml").read_text(encoding="utf-8").startswith("Subject: S")
     assert (tmp_path / "voice" / "PACS-REQ-000100.mp3").read_bytes() == b"mp3"
+
+
+def test_waive_records_actor_cancels_request_and_updates_readiness(client_and_fake):
+    client, fake = client_and_fake
+    case_id = _seed_case()
+    client.post(f"/api/cases/{case_id}/requests")
+    assert client.post("/api/items/ITEM-TEST-1/waive", json={"reason": "x", "coordinator": "K"}).status_code == 422
+    out = client.post("/api/items/ITEM-TEST-1/waive", json={"reason": "Není potřeba", "coordinator": "Koordinátor"})
+    data = out.json()
+    assert out.status_code == 200 and data["actor"] == "Koordinátor" and data["cancelled_request"]
+    assert fake.calls[-1][0] == "CANCEL"
+    with session_scope() as db:
+        case = db.get(Case, case_id)
+        assert case.readiness != "not_ready"
+    assert client.post("/api/items/ITEM-NOPE/waive", json={"reason": "Není potřeba", "coordinator": "K"}
+                       ).status_code == 404
+
+
+def test_delivery_without_hospital_study_uses_request_values_and_verifies(client_and_fake):
+    client, fake = client_and_fake
+    case_id = _seed_case()
+    client.post(f"/api/cases/{case_id}/requests")
+    rid = next(iter(fake.requests))
+    client.post("/api/requests/approve-all", json={"coordinator": "K", "case_ids": [case_id]})
+    wrong = client.post(f"/api/requests/{rid}/simulate-delivery", json={"modality": "CT"})
+    assert wrong.json()["state"] == "RECEIVED"
+    assert fake.calls[-1][2] == {"modality": "CT", "date": "2025-05-12", "region": "chest"}
+    right = client.post(f"/api/requests/{rid}/simulate-delivery", json={})
+    assert right.json()["state"] == "VERIFIED"
+    with session_scope() as db:
+        case = db.get(Case, case_id)
+        assert (case.readiness, case.readiness_reason) == ("ready", "Všechna požadovaná vyšetření ověřena")
+
+
+def test_case_detail_carries_request_state(client_and_fake):
+    from app.requests import overlay
+
+    client, fake = client_and_fake
+    client.app.dependency_overrides[overlay.optional_client] = lambda: fake
+    case_id = _seed_case()
+    client.post(f"/api/cases/{case_id}/requests")
+    detail = client.get(f"/api/cases/{case_id}").json()
+    item = detail["items"][0]
+    assert item["request"]["state"] == "DRAFTED" and detail["requests_available"] is True
+    assert detail["case"]["reason"].startswith("Chybí")
+
+
+def test_nightly_run_drafts_only_and_reports_summary(client_and_fake, monkeypatch):
+    client, fake = client_and_fake
+    case_id = _seed_case()
+    monkeypatch.setattr(api, "run_case_check", lambda *a, **k: object())
+    out = client.post("/api/demo/nightly-run", json={"days": 3}).json()
+    assert out["cases_checked"] == 1 and out["drafts_created"] == 1 and out["drafts_pending"] == 1
+    assert {c[0] for c in fake.calls} == {"DRAFT"}  # nothing approved or sent
+    again = client.post("/api/demo/nightly-run", json={"days": 3}).json()
+    assert again["drafts_created"] == 0 and again["drafts_pending"] == 1
+    assert client.get("/api/demo/summary?days=7").json()["drafts_pending"] == 1
+    assert out["meetings"][0]["cases"] == 1 and out["meetings"][0]["drafts_created"] == 1
+    assert case_id
+
+def test_request_is_shared_between_cases_of_one_patient(client_and_fake):
+    from app.requests import overlay
+
+    client, fake = client_and_fake
+    client.app.dependency_overrides[overlay.optional_client] = lambda: fake
+    case_id = _seed_case()
+    with session_scope() as db:
+        for obj in (db.get(CaseResult, "CASE-TEST-REQ2"), db.get(Case, "CASE-TEST-REQ2"), db.get(Meeting, "MDT-TEST-REQ2")):
+            if obj:
+                db.delete(obj)
+        db.flush()
+        db.add(Meeting(id="MDT-TEST-REQ2", date=date.today() + timedelta(days=5), time="10:00", label="T2",
+                       eligible_groups=[]))
+        db.add(Case(id="CASE-TEST-REQ2", patient_id="PAC-TEST-0001", meeting_id="MDT-TEST-REQ2", check_status="done"))
+        db.flush()
+        db.add(CaseResult(case_id="CASE-TEST-REQ2",
+                          result=db.get(CaseResult, case_id).result))
+    client.post(f"/api/cases/{case_id}/requests")
+    assert client.post("/api/cases/CASE-TEST-REQ2/requests").json() == []  # no second draft for the same item
+    assert [r["requestId"] for r in client.get("/api/cases/CASE-TEST-REQ2/requests").json()] == ["PACS-REQ-000100"]
+    out = client.post("/api/requests/approve-all", json={"coordinator": "K", "case_ids": ["CASE-TEST-REQ2"]})
+    assert out.json()["approved"] == 1
+    detail = client.get("/api/cases/CASE-TEST-REQ2").json()
+    assert detail["items"][0]["request"]["state"] == "SENT"

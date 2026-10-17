@@ -169,25 +169,48 @@ def case_overview(case_id: str) -> dict:
     from app.app_db.models import Case
     from app.app_db.session import session_scope
     from app.pipeline.schemas import CaseCheckResult, Timeline
+    from app.requests.overlay import optional_client, refresh_case, waivers_for
 
     with session_scope() as db:
         case = db.get(Case, case_id)
         if case is None:
             raise ToolError("case not found")
-        if case.result:
+        client = optional_client()
+        overlaid, requests = refresh_case(db, case, client)
+        if overlaid is not None:
+            result = overlaid
+        elif case.result:
             result = CaseCheckResult.model_validate(case.result.result)
         else:
             result = CaseCheckResult(patient_id=case.patient_id, timeline=Timeline(patient_id=case.patient_id),
                                      readiness=case.readiness, readiness_reason=case.readiness_reason)
-        detail = build_case_detail(case, result).model_dump(mode="json")
+        detail = build_case_detail(case, result, requests=requests,
+                                   waivers=waivers_for(db, case.id)).model_dump(mode="json")
     sources = [case_id] + [i["id"] for i in detail["items"]]
     return {"case": detail, "sources": sources}
 
 
 def request_status(request_id: str) -> dict:
-    """Stub until the request production is merged; replace this one function then."""
-    return {"available": False, "request_id": request_id,
-            "message": "request status is not available yet", "sources": []}
+    """State, provider and history of one request from the IRIS production (read only)."""
+    if not _SAFE.match(request_id or ""):
+        raise ToolError("invalid request id")
+    from app.requests.production_client import ProductionError, get_client
+
+    try:
+        data = get_client().get(request_id)
+    except ProductionError as exc:
+        return {"available": False, "request_id": request_id, "message": str(exc)[:200], "sources": []}
+    if data is None:
+        return {"available": True, "found": False, "request_id": request_id, "sources": []}
+    keep = ("requestId", "itemId", "state", "modality", "targetDate", "regions", "deadline", "approvedBy",
+            "approvedAt", "attempts", "replyClass", "verifyReason", "note", "fhirTaskId")
+    out = {k: data.get(k) for k in keep}
+    out.update(available=True, found=True, simulated=True,
+               provider=(data.get("provider") or {}).get("name"),
+               history=[{"ts": h.get("ts"), "to": h.get("to"), "note": h.get("note")}
+                        for h in data.get("history", [])][-10:],
+               sources=[request_id] + ([f"Task/{data['fhirTaskId']}"] if data.get("fhirTaskId") else []))
+    return out
 
 
 # --- Drafts -------------------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import { cs } from "../i18n/cs";
 import type { PlannedExam } from "../services/api-types";
 import { useUpdatePlannedExam } from "../services/api";
 import { formatDate, parseRegions, percent, regionLabel, regionsText } from "./format";
+import SimulaceTag from "./SimulaceTag";
 import { Button, Field, FieldLabel, Panel } from "./ui";
 
 interface Props {
@@ -84,9 +85,20 @@ export default function PlannedExamBox({ caseId, exam, onOpenSource }: Props) {
             <span className="font-medium text-accent-600">{formatDate(exam.date)}</span>
           </Field>
           <Field label={cs.plannedExam.site}>{exam.site ?? cs.common.none}</Field>
+          <Field label={cs.plannedExam.sourceLabel}>
+            {exam.source === "ris" ? (
+              <span title={cs.plannedExam.sourceRisHint} className="inline-flex items-center gap-1" data-planned-source="ris">
+                {cs.plannedExam.sourceRis} <SimulaceTag />
+              </span>
+            ) : exam.source === "coordinator" ? (
+              cs.plannedExam.sourceCoordinator
+            ) : (
+              cs.plannedExam.sourceText
+            )}
+          </Field>
           {exam.quote && (
             <Field label={cs.plannedExam.quote} className="min-w-[16rem] flex-1">
-              {exam.source_doc_id ? (
+              {exam.source_doc_id && exam.source !== "ris" ? (
                 <button
                   type="button"
                   onClick={() => onOpenSource(exam.source_doc_id as string, exam.quote)}

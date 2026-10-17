@@ -72,6 +72,8 @@ export interface PlannedExam {
   quote: string | null;
   source_doc_id: string | null;
   confidence: number | null; // 0..1
+  // "ris": order from the simulated RIS (HL7 ORM^O01), "text": read from a note, "coordinator": corrected
+  source?: "text" | "ris" | "coordinator";
 }
 
 export interface TimelineEntry {
@@ -100,6 +102,14 @@ export interface RequestRef {
   id: string;
   state: RequestState;
   updated_at: string;
+  provider_name?: string | null;
+  approved_by?: string | null;
+}
+
+export interface Waiver {
+  reason: string;
+  actor: string;
+  waived_at: string;
 }
 
 export interface RequiredItem {
@@ -117,6 +127,7 @@ export interface RequiredItem {
   holding_site_basis?: "stated" | "text_near_date" | null;
   evidence: Evidence | null;
   request: RequestRef | null;
+  waiver?: Waiver | null;
   simulated: boolean;
   note?: string | null;
 }
@@ -136,6 +147,7 @@ export interface CaseDetail {
   simulated: boolean;
   check_status?: string;
   notes?: string[];
+  requests_available?: boolean;
 }
 
 // GET /api/cases/{caseId}/documents/{docId}
