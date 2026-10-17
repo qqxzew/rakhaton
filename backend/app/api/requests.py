@@ -26,7 +26,7 @@ from app.llm.client import StructuredLlm
 from app.ml.predict import prediction_for_request
 from app.pipeline.run import run_case_check
 from app.pipeline.schemas import CaseCheckResult, RequiredItem
-from app.requests.overlay import refresh_case, requests_for_case
+from app.requests.overlay import DONE_STATES, confirm_key, refresh_case, requests_for_case
 from app.requests.production_client import ProductionClient, ProductionError, get_client, sync_files, visual_trace_url
 
 router = APIRouter(prefix="/api", tags=["requests"])
@@ -322,6 +322,28 @@ def acknowledge_issue(case_id: str, issue_key: str, body: AckBody, db: Session =
     db.commit()
     _refresh(db, client, {case_id})
     return {"case_id": case_id, "issue_key": issue_key, "acknowledged": True, "actor": ack.actor,
+            "readiness": case.readiness, "readiness_reason": case.readiness_reason}
+
+
+@router.post("/cases/{case_id}/items/{item_id}/confirm")
+def confirm_delivery(case_id: str, item_id: str, body: AckBody, db: Session = Depends(_db_dependency),
+                     client: ProductionClient = Depends(production)) -> dict:
+    """Coordinator confirms a delivered and automatically verified study; only then the item counts as ok."""
+    case = _case_for_item(db, item_id, case_id)
+    req = requests_for_case(client, case).get(item_id) if client is not None else None
+    if req is None or req.get("state") not in DONE_STATES:
+        raise ValidationFailed("Studie zatím nebyla doručena a ověřena")
+    key = confirm_key(item_id)
+    ack = db.get(IssueAck, (case_id, key))
+    if ack is None:
+        ack = IssueAck(case_id=case_id, issue_key=key, note=body.note, actor=body.coordinator,
+                       acked_at=utcnow())
+        db.add(ack)
+    else:
+        ack.note, ack.actor, ack.acked_at = body.note, body.coordinator, utcnow()
+    db.commit()
+    _refresh(db, client, {case_id})
+    return {"case_id": case_id, "item_id": item_id, "confirmed": True, "actor": ack.actor,
             "readiness": case.readiness, "readiness_reason": case.readiness_reason}
 
 

@@ -140,6 +140,9 @@ export const requestsApi = {
   acknowledge: (caseId: string, key: string, coordinator: string, note = "") =>
     post<{ readiness: string; readiness_reason: string }>(
       `/cases/${enc(caseId)}/issues/${enc(key)}/acknowledge`, { coordinator, note }),
+  confirm: (caseId: string, itemId: string, coordinator: string) =>
+    post<{ readiness: string; readiness_reason: string }>(
+      `/cases/${enc(caseId)}/items/${enc(itemId)}/confirm`, { coordinator }),
   nightly: () => post<NightlyResult>("/demo/nightly-run", { days: 2 }),
   summary: () => call<DemoSummary>("/demo/summary?days=7"),
   advance: (hours: number) => post<{ offsetSeconds?: number; now?: string; ticked?: unknown[] }>("/demo/advance-time", { hours }),

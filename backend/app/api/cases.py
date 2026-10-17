@@ -22,7 +22,7 @@ from app.pipeline.normalize import clean_regions, normalize_modality
 from app.pipeline.run import run_case_check
 from app.pipeline.schemas import CaseCheckResult, Timeline
 from app.pipeline.timeline import decode_attachment, report_text, to_date
-from app.requests.overlay import optional_client, refresh_case, waivers_for
+from app.requests.overlay import acks_for, optional_client, refresh_case, waivers_for
 from app.requests.production_client import ProductionClient
 from app.scheduling.anchoring import shift_iso, unshift_date
 from app.scheduling.eligibility import validate_registration
@@ -85,7 +85,8 @@ def get_case(case_id: str, db: Session = Depends(_db_dependency),
     overlaid, requests = refresh_case(db, case, client)
     db.commit()
     result = overlaid or _empty_result(case)
-    detail = build_case_detail(case, result, requests=requests, waivers=waivers_for(db, case.id))
+    detail = build_case_detail(case, result, requests=requests, waivers=waivers_for(db, case.id),
+                               acks=acks_for(db, case.id))
     detail.requests_available = client is not None and requests is not None
     return detail
 

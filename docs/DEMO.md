@@ -21,11 +21,11 @@ Backup video of the whole flow: `data/demo/pacs_komparator_demo.mp4` (2:08, Czec
 | Step | Screen | Say / do |
 |---|---|---|
 | 1 | Přehled MDT | "Koordinátor vidí konzilia na 7 dní. Noční běh dva dny předem už připravil žádosti." Point at the red meeting and the banner "Noční běh: N žádostí ke schválení". |
-| 2 | Day → patient with planned PET (Homolka) | "Plánované PET jsme našli v ambulantní zprávě – tady je přesná citace." Click the quote. |
-| 3 | Požadovaná předchozí vyšetření | "AI přečetla nálezy: CT existuje, ale snímky nejsou v PACS. Starší PET je zmíněné v nálezu, u nás chybí – přes FHIR jsme zjistili, že ho má FNM." Click the quote "Ve srovnání s PET/CT…". |
+| 2 | Day → patient with planned PET (Homolka) | The patient page shows only name, year of birth and one row per comparison study with three states: **Připraveno**, **Čeká na odpověď** (when and how it was requested), **Vyžaduje pozornost** (cannot be obtained, or delivered and waiting for confirmation). "Koordinátor vidí jen to, co potřebuje." Then "Zobrazit podrobnosti": "Plánované PET jsme našli v ambulantní zprávě – tady je přesná citace." Click the quote. |
+| 3 | Podrobnosti → Požadovaná předchozí vyšetření | "AI přečetla nálezy: CT existuje, ale snímky nejsou v PACS. Starší PET je zmíněné v nálezu, u nás chybí – přes FHIR jsme zjistili, že ho má FNM." Click the quote "Ve srovnání s PET/CT…". |
 | 4 | Dashboard → Schválit vše | "Koordinátor jen schválí. E-mail obsahuje jen minimum údajů." Show Mailpit. |
 | 5 | Posunout čas +24 h (twice) | "Bez odpovědi přijde připomínka, pak automatický hovor – bez identity pacienta." Open "Zobrazit žádost" (e-mail, reminder, voice transcript). |
-| 6 | Simulovat odpověď / doručení | "Nemocnice pošle studii přes IHE MHD, systém ověří, že odpovídá." Then "Vzít na vědomí" on the open issue → **Připraveno**. |
+| 6 | Row "Simulace" → Simulovat odpověď / doručení | "Nemocnice pošle studii přes IHE MHD, systém ověří, že odpovídá." The row turns **Vyžaduje pozornost – snímky dorazily**; click "Potvrdit převzetí" (and "Vzít na vědomí" on any open issue in Podrobnosti) → **Připraveno**. |
 | 7 | Ask | "Jdeme správným směrem? Co by vám ještě chybělo?" |
 
 Numbers to say (Statistiky page, silver standard over 120 reports / 121 unambiguous citations): AI finds **99 %** of cited prior studies, dates **100 %** correct, every quote verified verbatim. Only **41 %** of cited priors exist in Motol data; a naive "latest study of the same modality" rule finds only **35 %** → reading the report text is the point.

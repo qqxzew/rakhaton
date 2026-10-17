@@ -179,8 +179,16 @@ def test_delivery_without_hospital_study_uses_request_values_and_verifies(client
     wrong = client.post(f"/api/requests/{rid}/simulate-delivery", json={"modality": "CT"})
     assert wrong.json()["state"] == "RECEIVED"
     assert fake.calls[-1][2] == {"modality": "CT", "date": "2025-05-12", "region": "chest"}
+    early = client.post(f"/api/cases/{case_id}/items/ITEM-TEST-1/confirm", json={"coordinator": "K"})
+    assert early.status_code == 422
     right = client.post(f"/api/requests/{rid}/simulate-delivery", json={})
     assert right.json()["state"] == "VERIFIED"
+    with session_scope() as db:
+        case = db.get(Case, case_id)
+        # verified automatically, but the coordinator still has to confirm the delivery
+        assert case.readiness == "attention" and "čeká na potvrzení" in case.readiness_reason
+    confirmed = client.post(f"/api/cases/{case_id}/items/ITEM-TEST-1/confirm", json={"coordinator": "K"})
+    assert confirmed.status_code == 200 and confirmed.json()["confirmed"]
     with session_scope() as db:
         case = db.get(Case, case_id)
         assert (case.readiness, case.readiness_reason) == ("ready", "Všechna požadovaná vyšetření ověřena")

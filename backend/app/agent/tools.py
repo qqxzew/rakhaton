@@ -169,7 +169,7 @@ def case_overview(case_id: str) -> dict:
     from app.app_db.models import Case
     from app.app_db.session import session_scope
     from app.pipeline.schemas import CaseCheckResult, Timeline
-    from app.requests.overlay import optional_client, refresh_case, waivers_for
+    from app.requests.overlay import acks_for, optional_client, refresh_case, waivers_for
 
     with session_scope() as db:
         case = db.get(Case, case_id)
@@ -185,7 +185,7 @@ def case_overview(case_id: str) -> dict:
             result = CaseCheckResult(patient_id=case.patient_id, timeline=Timeline(patient_id=case.patient_id),
                                      readiness=case.readiness, readiness_reason=case.readiness_reason)
         detail = build_case_detail(case, result, requests=requests,
-                                   waivers=waivers_for(db, case.id)).model_dump(mode="json")
+                                   waivers=waivers_for(db, case.id), acks=acks_for(db, case.id)).model_dump(mode="json")
     sources = [case_id] + [i["id"] for i in detail["items"]]
     return {"case": detail, "sources": sources}
 

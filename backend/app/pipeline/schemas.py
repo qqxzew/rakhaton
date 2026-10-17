@@ -199,6 +199,7 @@ class Timeline(BaseModel):
     diagnoses: list[str] = Field(default_factory=list)
     sex: str | None = None
     birth_year: int | None = None
+    birth_band: str | None = None  # k-anonymized patients only have a range such as "1940-1944"
 
 
 class RequiredItem(BaseModel):

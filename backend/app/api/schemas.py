@@ -44,6 +44,8 @@ class PatientView(BaseModel):
     sex: str
     age_band: str
     diagnoses: list[Diagnosis]
+    birth_year: int | None = None
+    birth_band: str | None = None
 
 
 class PlannedExamView(BaseModel):
@@ -85,6 +87,8 @@ class RequestRef(BaseModel):
     updated_at: str
     provider_name: str | None = None
     approved_by: str | None = None
+    approved_at: str | None = None
+    attempts: int = 0
 
 
 class WaiverView(BaseModel):
@@ -114,6 +118,7 @@ class RequiredItemView(BaseModel):
     evidence: EvidenceView | None
     request: RequestRef | None = None
     waiver: WaiverView | None = None
+    confirmation: WaiverView | None = None  # coordinator confirmed a delivered study (reason = note)
     simulated: bool = True
     note: str | None = None
     proposed_match: ProposedMatch | None = None

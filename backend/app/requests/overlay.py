@@ -7,6 +7,8 @@ the case readiness (CLAUDE.md 9.9). It never changes a request; the lifecycle st
 
 from __future__ import annotations
 
+import hashlib
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,6 +22,11 @@ from app.requests.production_client import ProductionClient, ProductionError, ge
 log = get_logger(__name__)
 
 DONE_STATES = ("VERIFIED", "CLOSED")
+
+
+def confirm_key(item_id: str) -> str:
+    """Key of the coordinator's confirmation of a delivered study, stored next to issue acknowledgements."""
+    return "rcv-" + hashlib.sha256(item_id.encode()).hexdigest()[:28]
 
 
 def optional_client() -> ProductionClient | None:
@@ -66,8 +73,13 @@ def overlay_result(result: CaseCheckResult, check_status: str, waivers: dict[str
             update.update(waived=True, note=f"Odpuštěno: {waiver.reason}")
         req = requests.get(item.id)
         if req is not None and req.get("state") in DONE_STATES:
-            update.update(availability="available", state="ok",
-                          note=f"Doručeno a ověřeno ({req.get('requestId')}, simulace)")
+            # the automatic check passed; the item is ok only after the coordinator confirms the delivery
+            if confirm_key(item.id) in (acks or {}):
+                update.update(availability="available", state="ok",
+                              note=f"Doručeno, ověřeno a potvrzeno ({req.get('requestId')}, simulace)")
+            elif not item.waived:
+                update.update(availability="available", state="attention",
+                              note=f"Snímky doručeny ({req.get('requestId')}), čeká na potvrzení")
         items.append(item.model_copy(update=update) if update else item)
     settled = {i.id for i in items if i.waived or (requests.get(i.id) or {}).get("state") in DONE_STATES}
     issues = []
